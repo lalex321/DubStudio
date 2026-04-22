@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <h1>Новый проект</h1>
+  <a class="muted" href="/projects">← Назад</a>
+</section>
+
+<p class="muted">Загрузите xlsx-файлы с wordcount по сериям. Название проекта определится автоматически из Project Info / имён файлов.</p>
+
+<form id="import-form" method="post" action="/projects/new" enctype="multipart/form-data" class="form">
+  <label class="drop">
+    <input id="files" type="file" name="files" multiple accept=".xlsx" required>
+    <span id="drop-label">Выбрать xlsx-файлы</span>
+  </label>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if warnings %}
+  <ul class="warnings">
+    {% for w in warnings %}<li>{{ w }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</form>
+<script>
+(function () {
+  const inp = document.getElementById('files');
+  const form = document.getElementById('import-form');
+  const label = document.getElementById('drop-label');
+  inp.addEventListener('change', () => {
+    if (!inp.files || !inp.files.length) return;
+    const names = Array.from(inp.files).map(f => f.name).join(', ');
+    label.textContent = `Импортирую: ${names}…`;
+    form.submit();
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <h1>Проекты</h1>
+  <a class="btn btn-primary" href="/projects/new">+ Добавить проект</a>
+</section>
+
+{% if projects %}
+<div class="grid-wrap">
+<table class="grid grid-natural" id="projects-grid">
+  <thead>
+    <tr>
+      <th class="col-num sortable" data-sort-type="num" data-sort-dir="asc">#<span class="sort-arrow">↑</span></th>
+      <th class="sortable" data-sort-type="text">Название<span class="sort-arrow"></span></th>
+      <th class="col-num sortable" data-sort-type="num">Эпизодов<span class="sort-arrow"></span></th>
+      <th class="col-date sortable" data-sort-type="text">Дата начала<span class="sort-arrow"></span></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in projects %}
+    <tr onclick="location.href='/projects/{{ p.id }}'">
+      <td class="col-num">{{ p.number }}</td>
+      <td>{{ p.title }}</td>
+      <td class="col-num">{{ p.episodes }}</td>
+      <td class="col-date">{{ p.start_date }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+<script src="{{ url_for('static', path='/sort.js') }}"></script>
+<script>attachSort(document.getElementById('projects-grid'));</script>
+{% else %}
+<section class="empty">
+  <p class="muted">Пока ни одного проекта.</p>
+  <a class="btn btn-primary btn-lg" href="/projects/new">+ Добавить первый проект</a>
+</section>
+{% endif %}
+{% endblock %}

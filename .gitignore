@@ -11,3 +11,4 @@ __pycache__/
 /uploads/
 .idea/
 .vscode/
+.session_secret

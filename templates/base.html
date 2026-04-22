@@ -4,12 +4,42 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ title|default("DubStudio") }}</title>
+<script>
+  (function () {
+    const t = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
 <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
 </head>
 <body>
 <header class="topbar">
   <a class="brand" href="/">DubStudio</a>
+  <nav class="nav">
+    {% if user %}
+    <a href="/projects">Проекты</a>
+    {% if is_admin %}<a href="/admin">Админ</a>{% endif %}
+    <span class="user">{{ user }}</span>
+    <a class="muted" href="/logout">Выйти</a>
+    {% endif %}
+    <button type="button" class="theme-toggle" id="theme-toggle" title="Сменить тему" aria-label="Сменить тему"></button>
+  </nav>
 </header>
+<script>
+  (function () {
+    const btn = document.getElementById('theme-toggle');
+    const render = () => {
+      btn.textContent = document.documentElement.dataset.theme === 'light' ? '☾' : '☀';
+    };
+    btn.addEventListener('click', () => {
+      const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+      document.documentElement.dataset.theme = next;
+      localStorage.setItem('theme', next);
+      render();
+    });
+    render();
+  })();
+</script>
 <main class="main">
   {% block content %}{% endblock %}
 </main>

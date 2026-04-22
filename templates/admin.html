@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <h1>Админка</h1>
+</section>
+
+<div class="admin-subtabs">
+  <a class="admin-subtab-btn {% if tab == 'users' %}active{% endif %}" href="/admin?tab=users">Users</a>
+  <a class="admin-subtab-btn {% if tab == 'actors' %}active{% endif %}" href="/admin?tab=actors">Actors</a>
+</div>
+
+<div class="admin-pane">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  {% if tab == 'users' %}
+  <form method="post" action="/admin/users" class="admin-add-form">
+    <input type="text" name="email" placeholder="Имя / email" required>
+    <input type="password" name="password" placeholder="Пароль" required>
+    <select name="role">
+      <option value="assistant_director">assistant_director</option>
+      <option value="admin">admin</option>
+    </select>
+    <button type="submit" class="admin-btn">+ Добавить</button>
+  </form>
+
+  <div class="grid-wrap">
+  <table class="grid grid-natural admin-grid">
+    <thead>
+      <tr>
+        <th class="col-num">#</th>
+        <th>Имя / email</th>
+        <th>Роль</th>
+        <th class="col-date">Создан</th>
+        <th class="col-actions"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td class="col-num">{{ u.id }}</td>
+        <td>{{ u.email }}</td>
+        <td>{{ u.role }}</td>
+        <td class="col-date">{{ u.created_at.strftime('%Y-%m-%d') }}</td>
+        <td class="col-actions">
+          <form method="post" action="/admin/users/{{ u.id }}/delete" class="inline-form"
+                onsubmit="return confirm('Удалить пользователя {{ u.email }}?')">
+            <button type="submit" class="admin-btn ghost danger">Удалить</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  {% else %}
+  <form method="post" action="/admin/actors" class="admin-add-form">
+    <input type="text" name="name" placeholder="Имя актёра" required>
+    <button type="submit" class="admin-btn">+ Добавить</button>
+  </form>
+
+  <div class="grid-wrap">
+  <table class="grid grid-natural admin-grid">
+    <thead>
+      <tr>
+        <th class="col-num">#</th>
+        <th>Имя</th>
+        <th class="col-num">Назначений</th>
+        <th class="col-actions"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in actors %}
+      <tr>
+        <td class="col-num">{{ a.id }}</td>
+        <td>
+          <form method="post" action="/admin/actors/{{ a.id }}/rename" class="inline-form rename-form">
+            <input type="text" name="name" value="{{ a.name }}" class="rename-input">
+            <button type="submit" class="admin-btn ghost">Переименовать</button>
+          </form>
+        </td>
+        <td class="col-num">{{ a.used }}</td>
+        <td class="col-actions">
+          <form method="post" action="/admin/actors/{{ a.id }}/delete" class="inline-form"
+                onsubmit="return confirm(
+                  {% if a.used %}'Удалить актёра «{{ a.name }}»? Он назначен в {{ a.used }} проект(а/ов) — назначения будут удалены.'
+                  {% else %}'Удалить актёра «{{ a.name }}»?'{% endif %}
+                )">
+            <button type="submit" class="admin-btn ghost danger">Удалить</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

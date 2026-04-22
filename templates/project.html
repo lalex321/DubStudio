@@ -1,0 +1,352 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <a class="muted" href="/projects">← Проекты</a>
+    <h1>{{ project.title }} <span class="muted small">#{{ project.number }}</span></h1>
+    <p class="muted small">Начало: {{ project.start_date }} · Эпизодов: {{ episodes|length }}</p>
+  </div>
+  <div class="head-actions">
+    <a class="btn" href="/projects/{{ project.id }}/report" title="Отчёт для бухгалтерии: актёр → слова (Transcription)">↓ Report</a>
+    <a class="btn" href="/projects/{{ project.id }}/export" title="Скачать xlsx-сводку">↓ Export Excel</a>
+    <form id="import-form" method="post" action="/projects/{{ project.id }}/import" enctype="multipart/form-data" class="inline-form"
+          data-edited-count="{{ edited_count }}">
+      <label class="btn btn-ghost">
+        <input type="file" name="files" multiple accept=".xlsx" hidden id="import-input">
+        + Импортировать серии
+      </label>
+    </form>
+  </div>
+</section>
+
+<div class="tabs">
+  <button class="tab active" data-metric="transcription">Transcription WC</button>
+  <button class="tab" data-metric="dialog">Dialog WC</button>
+</div>
+
+{% if rows %}
+<div class="grid-wrap">
+<table class="grid grid-pivot" id="pivot" data-project-id="{{ project.id }}" data-metric="transcription">
+  <thead>
+    <tr>
+      <th class="sticky-l sortable" data-sort-type="text" data-sort-dir="asc" data-col-key="character">Персонаж<span class="sort-arrow">↑</span><span class="col-resize"></span></th>
+      <th class="sticky-l actor-col sortable" data-sort-type="text" data-col-key="actor">Актёр<span class="sort-arrow"></span><span class="col-resize"></span></th>
+      {% for n in episodes %}<th class="col-num sortable" data-sort-type="num" data-col-key="ep:{{ n }}">E{{ "%02d"|format(n) }}<span class="sort-arrow"></span><span class="col-resize"></span></th>{% endfor %}
+      <th class="col-num total sortable" data-sort-type="num" data-col-key="total">Total<span class="sort-arrow"></span><span class="col-resize"></span></th>
+      <th class="col-num sortable" data-sort-type="num" data-col-key="episodes">Episodes<span class="sort-arrow"></span><span class="col-resize"></span></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr data-character-id="{{ row.character_id }}">
+      <td class="sticky-l">{{ row.character }}</td>
+      <td class="sticky-l actor-col">
+        <input
+          class="actor-input"
+          type="text"
+          size="1"
+          list="actors-list"
+          value="{{ row.actor_name }}"
+          data-initial="{{ row.actor_name }}"
+          placeholder="—"
+        >
+      </td>
+      {% for idx in range(row.per_ep|length) %}
+      {% set cell = row.per_ep[idx] %}
+      {% set ep_num = episodes[idx] %}
+      <td class="col-num wc-cell"
+          data-dialog="{{ cell.dialog }}"
+          data-transcription="{{ cell.transcription }}"
+          data-episode-number="{{ ep_num }}">
+        <input class="wc-input" type="text" inputmode="numeric" size="1"
+               value="{{ cell.transcription or '' }}"
+               data-initial="{{ cell.transcription or '' }}">
+      </td>
+      {% endfor %}
+      <td class="col-num total"
+          data-dialog="{{ row.totals.dialog }}"
+          data-transcription="{{ row.totals.transcription }}">
+        {{ row.totals.transcription or '' }}
+      </td>
+      <td class="col-num"
+          data-dialog="{{ row.episodes_count.dialog }}"
+          data-transcription="{{ row.episodes_count.transcription }}">
+        {{ row.episodes_count.transcription or '' }}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr class="foot-total">
+      <td class="sticky-l">EPISODE TOTAL</td>
+      <td class="sticky-l actor-col"></td>
+      {% for cell in footer.per_ep %}
+      <td class="col-num"
+          data-dialog="{{ cell.dialog }}"
+          data-transcription="{{ cell.transcription }}">
+        {{ cell.transcription or '' }}
+      </td>
+      {% endfor %}
+      <td class="col-num total"
+          data-dialog="{{ footer.totals.dialog }}"
+          data-transcription="{{ footer.totals.transcription }}">
+        {{ footer.totals.transcription or '' }}
+      </td>
+      <td class="col-num"></td>
+    </tr>
+  </tfoot>
+</table>
+</div>
+
+<datalist id="actors-list">
+  {% for a in actors %}<option value="{{ a }}">{% endfor %}
+</datalist>
+
+<script src="{{ url_for('static', path='/sort.js') }}"></script>
+<script>
+(function () {
+  const table = document.getElementById('pivot');
+  const projectId = table.dataset.projectId;
+  const tabs = document.querySelectorAll('.tab');
+  attachSort(table);
+
+  const setCellText = (td, metric) => {
+    const v = td.dataset[metric];
+    td.textContent = (v && v !== '0') ? v : '';
+  };
+
+  const syncMetric = (metric) => {
+    // для input-ячеек обновляем .value, для остальных — textContent
+    table.querySelectorAll('tbody td.wc-cell').forEach(td => {
+      const inp = td.querySelector('.wc-input');
+      if (!inp) return;
+      const v = td.dataset[metric] || '';
+      inp.value = (v && v !== '0') ? v : '';
+      inp.dataset.initial = inp.value;
+    });
+    table.querySelectorAll('td[data-' + metric + ']:not(.wc-cell)').forEach(td => {
+      setCellText(td, metric);
+    });
+  };
+
+  tabs.forEach(t => t.addEventListener('click', () => {
+    tabs.forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    const metric = t.dataset.metric;
+    table.dataset.metric = metric;
+    syncMetric(metric);
+    if (table._resort) table._resort();
+  }));
+
+  const recomputeRow = (tr, metric) => {
+    const wcCells = tr.querySelectorAll('td.wc-cell');
+    let totalD = 0, totalT = 0, epsD = 0, epsT = 0;
+    wcCells.forEach(td => {
+      const d = Number(td.dataset.dialog) || 0;
+      const t = Number(td.dataset.transcription) || 0;
+      totalD += d; totalT += t;
+      if (d > 0) epsD++;
+      if (t > 0) epsT++;
+    });
+    const cells = tr.cells;
+    const totalCell = cells[cells.length - 2];
+    const epsCell = cells[cells.length - 1];
+    totalCell.dataset.dialog = totalD;
+    totalCell.dataset.transcription = totalT;
+    epsCell.dataset.dialog = epsD;
+    epsCell.dataset.transcription = epsT;
+    setCellText(totalCell, metric);
+    setCellText(epsCell, metric);
+  };
+
+  const recomputeFooter = (metric) => {
+    const foot = table.querySelector('tfoot .foot-total');
+    if (!foot) return;
+    const epCols = table.tHead.rows[0].cells.length - 4; // Char, Actor, ...eps, Total, Episodes
+    let grandD = 0, grandT = 0;
+    for (let c = 0; c < epCols; c++) {
+      let sumD = 0, sumT = 0;
+      table.querySelectorAll('tbody tr').forEach(tr => {
+        const td = tr.cells[2 + c];
+        sumD += Number(td.dataset.dialog) || 0;
+        sumT += Number(td.dataset.transcription) || 0;
+      });
+      const footCell = foot.cells[2 + c];
+      footCell.dataset.dialog = sumD;
+      footCell.dataset.transcription = sumT;
+      setCellText(footCell, metric);
+      grandD += sumD; grandT += sumT;
+    }
+    const totalCell = foot.cells[foot.cells.length - 2];
+    totalCell.dataset.dialog = grandD;
+    totalCell.dataset.transcription = grandT;
+    setCellText(totalCell, metric);
+  };
+
+  table.querySelectorAll('.wc-input').forEach(inp => {
+    const td = inp.closest('td.wc-cell');
+    const tr = td.parentElement;
+    const save = async () => {
+      const raw = inp.value.trim();
+      const val = raw === '' ? 0 : Math.max(0, parseInt(raw, 10) || 0);
+      const metric = table.dataset.metric;
+      const prevValue = Number(td.dataset[metric]) || 0;
+      if (val === prevValue) { inp.value = val ? String(val) : ''; inp.dataset.initial = inp.value; return; }
+      inp.classList.remove('error', 'saved');
+      inp.classList.add('saving');
+      try {
+        const res = await fetch(`/api/projects/${projectId}/wordcount`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            character_id: Number(tr.dataset.characterId),
+            episode_number: Number(td.dataset.episodeNumber),
+            metric,
+            value: val,
+          }),
+        });
+        if (!res.ok) throw new Error('save failed');
+        td.dataset[metric] = String(val);
+        inp.value = val ? String(val) : '';
+        inp.dataset.initial = inp.value;
+        recomputeRow(tr, metric);
+        recomputeFooter(metric);
+        if (table._resort) table._resort();
+        inp.classList.remove('saving');
+        inp.classList.add('saved');
+        setTimeout(() => inp.classList.remove('saved'), 500);
+      } catch (e) {
+        console.error('Wordcount save failed', e);
+        inp.classList.remove('saving');
+        inp.classList.add('error');
+        inp.value = inp.dataset.initial || '';
+      }
+    };
+    inp.addEventListener('blur', save);
+    inp.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') { ev.preventDefault(); inp.blur(); }
+      if (ev.key === 'Escape') { inp.value = inp.dataset.initial || ''; inp.blur(); }
+    });
+  });
+
+  // Column resize with localStorage persistence
+  const widthsKey = `dubstudio:colw:pivot:${projectId}`;
+  const loadWidths = () => {
+    try { return JSON.parse(localStorage.getItem(widthsKey) || '{}'); }
+    catch (e) { return {}; }
+  };
+  const saveWidths = (w) => localStorage.setItem(widthsKey, JSON.stringify(w));
+
+  const applySavedWidths = () => {
+    const saved = loadWidths();
+    table.querySelectorAll('thead th[data-col-key]').forEach(th => {
+      const k = th.dataset.colKey;
+      if (saved[k]) th.style.width = saved[k] + 'px';
+    });
+  };
+  applySavedWidths();
+
+  let resizingFlag = false;
+  table.querySelectorAll('.col-resize').forEach(handle => {
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const th = handle.parentElement;
+      const startX = e.clientX;
+      const startW = th.getBoundingClientRect().width;
+      resizingFlag = true;
+      handle.classList.add('active');
+      document.body.style.cursor = 'col-resize';
+      const onMove = (ev) => {
+        const newW = Math.max(30, startW + (ev.clientX - startX));
+        th.style.width = newW + 'px';
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        handle.classList.remove('active');
+        document.body.style.cursor = '';
+        const saved = loadWidths();
+        saved[th.dataset.colKey] = Math.round(th.getBoundingClientRect().width);
+        saveWidths(saved);
+        setTimeout(() => { resizingFlag = false; }, 0);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+    // Не стартуем sort при клике на ручку
+    handle.addEventListener('click', (e) => e.stopPropagation());
+  });
+
+  // Confirm on re-import if there are manual edits
+  const importInput = document.getElementById('import-input');
+  const importForm = document.getElementById('import-form');
+  if (importInput && importForm) {
+    importInput.addEventListener('change', (ev) => {
+      if (!importInput.files || !importInput.files.length) return;
+      const n = Number(importForm.dataset.editedCount) || 0;
+      if (n > 0) {
+        const ok = window.confirm(
+          `В проекте ${n} ручных правок в ячейках. Повторный импорт затрёт их в затронутых сериях. Продолжить?`
+        );
+        if (!ok) { importInput.value = ''; ev.preventDefault(); return; }
+      }
+      importForm.submit();
+    });
+  }
+
+  const datalist = document.getElementById('actors-list');
+  const knownActors = new Set(
+    Array.from(datalist.options).map(o => o.value.toLowerCase())
+  );
+
+  table.querySelectorAll('.actor-input').forEach(inp => {
+    const save = async () => {
+      const newVal = inp.value.trim();
+      if (newVal === (inp.dataset.initial || '')) return;
+      const row = inp.closest('tr');
+      const cid = row.dataset.characterId;
+      inp.classList.remove('error', 'saved');
+      inp.classList.add('saving');
+      try {
+        const res = await fetch(
+          `/api/projects/${projectId}/characters/${cid}/actor`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newVal }),
+          }
+        );
+        if (!res.ok) throw new Error('save failed: ' + res.status);
+        const data = await res.json();
+        inp.value = data.actor_name || '';
+        inp.dataset.initial = inp.value;
+        if (data.actor_name && !knownActors.has(data.actor_name.toLowerCase())) {
+          const opt = document.createElement('option');
+          opt.value = data.actor_name;
+          datalist.appendChild(opt);
+          knownActors.add(data.actor_name.toLowerCase());
+        }
+        inp.classList.remove('saving');
+        inp.classList.add('saved');
+        setTimeout(() => inp.classList.remove('saved'), 600);
+      } catch (e) {
+        console.error('Actor save failed', e);
+        inp.classList.remove('saving');
+        inp.classList.add('error');
+        // Откатываем к последнему сохранённому, чтобы было видно что не ушло
+        inp.value = inp.dataset.initial || '';
+      }
+    };
+    inp.addEventListener('blur', save);
+    inp.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') { ev.preventDefault(); inp.blur(); }
+      if (ev.key === 'Escape') { inp.value = inp.dataset.initial || ''; inp.blur(); }
+    });
+  });
+})();
+</script>
+{% else %}
+<p class="muted">В этом проекте пока нет данных. Импортируйте xlsx-файлы серий.</p>
+{% endif %}
+{% endblock %}
