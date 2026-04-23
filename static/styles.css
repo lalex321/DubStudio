@@ -132,8 +132,8 @@ a:hover { color: var(--primary-hover); }
 .page-head {
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
+  justify-content: flex-start;
+  gap: 32px;
   margin: 8px 0 14px;
   flex-wrap: wrap;
 }
@@ -445,10 +445,10 @@ a:hover { color: var(--primary-hover); }
 .grid tbody tr { cursor: pointer; }
 .grid tbody tr:hover { background: var(--hover); }
 
-.col-num { text-align: right; font-variant-numeric: tabular-nums; }
+.col-num { text-align: center; font-variant-numeric: tabular-nums; }
 .col-date { width: 130px; }
 .grid .col-num { width: 90px; }
-.grid td.col-num, .grid th.col-num { text-align: right; }
+.grid td.col-num, .grid th.col-num { text-align: center; }
 
 /* ---------- project detail pivot ---------- */
 .tabs {
@@ -609,7 +609,7 @@ a:hover { color: var(--primary-hover); }
   font-weight: 500;
 }
 .wc-input {
-  text-align: right;
+  text-align: center;
   font-variant-numeric: tabular-nums;
   padding: 1px 2px;
 }
