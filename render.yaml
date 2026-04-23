@@ -8,9 +8,15 @@ services:
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /healthz
     autoDeploy: true
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: DUBSTUDIO_SESSION_SECRET
         generateValue: true
+      - key: DUBSTUDIO_DB_URL
+        value: sqlite:////var/data/dubstudio.db
       - key: DUBSTUDIO_ADMIN_EMAIL
         sync: false
       - key: DUBSTUDIO_ADMIN_PASSWORD
