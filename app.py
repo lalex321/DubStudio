@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -47,8 +48,15 @@ TEMPLATES = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 _UPLOAD_SLACK_BYTES = 1 * 1024 * 1024  # multipart overhead
 
+_SECURE_COOKIES = os.environ.get("DUBSTUDIO_SECURE_COOKIES", "").lower() in ("1", "true", "yes")
+
 app = FastAPI(title="DubStudio")
-app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    https_only=_SECURE_COOKIES,
+    same_site="lax",
+)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 
