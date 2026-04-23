@@ -293,7 +293,7 @@ a:hover { color: var(--primary-hover); }
   user-select: none;
 }
 .grid thead th { position: relative; }
-.grid thead th.sortable { cursor: pointer; }
+.grid thead th.sortable { cursor: pointer; padding-right: 22px; }
 .grid thead th.sortable:hover { color: var(--primary); }
 
 .col-resize {
@@ -311,11 +311,15 @@ a:hover { color: var(--primary-hover); }
   background: var(--accent-soft);
 }
 .sort-arrow {
-  display: inline-block;
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 10px;
-  margin-left: 4px;
+  text-align: right;
   font-size: 11px;
   color: var(--muted-2);
+  pointer-events: none;
 }
 
 /* ---------- admin ---------- */
