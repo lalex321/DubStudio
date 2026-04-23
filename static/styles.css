@@ -556,6 +556,29 @@ a:hover { color: var(--primary-hover); }
 .char-action-btn.error { color: var(--danger); border-color: var(--danger); }
 .char-action-btn:disabled { opacity: 0.5; cursor: default; }
 
+.merge-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--soft);
+}
+.merge-picker.error { border-color: var(--danger); }
+.merge-picker-input {
+  flex: 1;
+  min-width: 120px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font: inherit;
+  font-size: 12px;
+  background: var(--panel);
+  color: var(--text);
+}
+
 .grid-pivot tfoot .foot-total td {
   padding: 5px 8px;
   background: var(--head);

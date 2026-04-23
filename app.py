@@ -645,6 +645,70 @@ async def acknowledge_character(request: Request, project_id: int, character_id:
     return JSONResponse({"ok": True})
 
 
+@app.post("/api/projects/{project_id}/characters/{character_id}/merge")
+async def merge_character(request: Request, project_id: int, character_id: int):
+    if not is_authenticated(request):
+        raise HTTPException(401)
+    body = await request.json()
+    try:
+        target_id = int(body.get("target_id") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Некорректный target_id")
+    if not target_id or target_id == character_id:
+        raise HTTPException(400, "Некорректный target_id")
+
+    with Session(engine) as s:
+        source = s.get(Character, character_id)
+        target = s.get(Character, target_id)
+        if not source or source.project_id != project_id:
+            raise HTTPException(404, "Персонаж не найден")
+        if not target or target.project_id != project_id:
+            raise HTTPException(404, "Целевой персонаж не найден")
+
+        src_wcs = list(s.exec(select(WordCount).where(WordCount.character_id == source.id)).all())
+        tgt_wcs_by_ep = {
+            wc.episode_id: wc
+            for wc in s.exec(select(WordCount).where(WordCount.character_id == target.id)).all()
+        }
+
+        for swc in src_wcs:
+            twc = tgt_wcs_by_ep.get(swc.episode_id)
+            if twc:
+                twc.dialog_wc += swc.dialog_wc
+                twc.transcription_wc += swc.transcription_wc
+                twc.total_wc += swc.total_wc
+                twc.edited = twc.edited or swc.edited
+                s.add(twc)
+                s.delete(swc)
+            else:
+                swc.character_id = target.id
+                s.add(swc)
+
+        src_assign = s.exec(
+            select(Assignment).where(
+                Assignment.project_id == project_id, Assignment.character_id == source.id
+            )
+        ).first()
+        tgt_assign = s.exec(
+            select(Assignment).where(
+                Assignment.project_id == project_id, Assignment.character_id == target.id
+            )
+        ).first()
+        if src_assign:
+            if not tgt_assign:
+                src_assign.character_id = target.id
+                s.add(src_assign)
+            else:
+                s.delete(src_assign)
+
+        target.acknowledged = True
+        s.add(target)
+        s.delete(source)
+        s.commit()
+
+    return JSONResponse({"ok": True, "target_id": target_id})
+
+
 @app.post("/api/projects/{project_id}/wordcount")
 async def set_wordcount(request: Request, project_id: int):
     if not is_authenticated(request):

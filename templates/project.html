@@ -39,7 +39,7 @@
   <tbody>
     {% for row in rows %}
     <tr data-character-id="{{ row.character_id }}"{% if not row.acknowledged %} class="char-new"{% endif %}>
-      <td class="sticky-l char-name-cell" data-sort-value="{{ row.character }}">{% if not row.acknowledged %}<span class="char-new-badge" title="Новый персонаж после импорта">⚠</span>{% endif %}{{ row.character }}{% if not row.acknowledged %} <button type="button" class="char-action-btn char-keep-btn" data-character-id="{{ row.character_id }}" title="Оставить как есть">✓</button>{% endif %}</td>
+      <td class="sticky-l char-name-cell" data-sort-value="{{ row.character }}">{% if not row.acknowledged %}<span class="char-new-badge" title="Новый персонаж после импорта">⚠</span>{% endif %}{{ row.character }}{% if not row.acknowledged %} <button type="button" class="char-action-btn char-keep-btn" data-character-id="{{ row.character_id }}" title="Оставить как есть">✓</button><button type="button" class="char-action-btn char-merge-btn" data-character-id="{{ row.character_id }}" title="Слить с существующим">→</button><div class="merge-picker" hidden><input type="text" class="merge-picker-input" list="chars-list" placeholder="Слить с…"><button type="button" class="char-action-btn merge-confirm-btn">Объединить</button><button type="button" class="char-action-btn merge-cancel-btn" title="Отмена">✕</button></div>{% endif %}</td>
       <td class="sticky-l actor-col">
         <input
           class="actor-input"
@@ -100,6 +100,10 @@
 
 <datalist id="actors-list">
   {% for a in actors %}<option value="{{ a }}">{% endfor %}
+</datalist>
+
+<datalist id="chars-list">
+  {% for row in rows %}<option value="{{ row.character }}" data-char-id="{{ row.character_id }}">{% endfor %}
 </datalist>
 
 <script src="{{ url_for('static', path='/sort.js') }}"></script>
@@ -297,11 +301,67 @@
         const tr = btn.closest('tr');
         tr.classList.remove('char-new');
         tr.querySelector('.char-new-badge')?.remove();
+        tr.querySelector('.char-merge-btn')?.remove();
+        tr.querySelector('.merge-picker')?.remove();
         btn.remove();
       } catch (err) {
         btn.disabled = false;
         btn.classList.add('error');
         console.error('acknowledge failed', err);
+      }
+    });
+  });
+
+  const charsList = document.getElementById('chars-list');
+  const charIdByName = new Map(
+    Array.from(charsList.options).map(o => [o.value.trim().toLowerCase(), o.dataset.charId])
+  );
+
+  table.querySelectorAll('.char-merge-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const picker = btn.closest('.char-name-cell').querySelector('.merge-picker');
+      const open = !picker.hasAttribute('hidden');
+      table.querySelectorAll('.merge-picker').forEach(p => p.setAttribute('hidden', ''));
+      if (open) return;
+      picker.removeAttribute('hidden');
+      picker.querySelector('.merge-picker-input').focus();
+    });
+  });
+
+  table.querySelectorAll('.merge-cancel-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const picker = btn.closest('.merge-picker');
+      picker.setAttribute('hidden', '');
+      picker.querySelector('.merge-picker-input').value = '';
+      picker.classList.remove('error');
+    });
+  });
+
+  table.querySelectorAll('.merge-confirm-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const picker = btn.closest('.merge-picker');
+      const input = picker.querySelector('.merge-picker-input');
+      const name = (input.value || '').trim().toLowerCase();
+      const cid = btn.closest('tr').dataset.characterId;
+      const targetId = charIdByName.get(name);
+      if (!targetId || targetId === cid) {
+        picker.classList.add('error');
+        return;
+      }
+      picker.classList.remove('error');
+      btn.disabled = true;
+      try {
+        const r = await fetch(`/api/projects/${projectId}/characters/${cid}/merge`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target_id: Number(targetId) }),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        location.reload();
+      } catch (err) {
+        btn.disabled = false;
+        picker.classList.add('error');
+        console.error('merge failed', err);
       }
     });
   });
