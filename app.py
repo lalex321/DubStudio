@@ -674,11 +674,12 @@ async def merge_character(request: Request, project_id: int, character_id: int):
         for swc in src_wcs:
             twc = tgt_wcs_by_ep.get(swc.episode_id)
             if twc:
-                twc.dialog_wc += swc.dialog_wc
-                twc.transcription_wc += swc.transcription_wc
-                twc.total_wc += swc.total_wc
-                twc.edited = twc.edited or swc.edited
-                s.add(twc)
+                if swc.edited and not twc.edited:
+                    twc.dialog_wc = swc.dialog_wc
+                    twc.transcription_wc = swc.transcription_wc
+                    twc.total_wc = swc.total_wc
+                    twc.edited = True
+                    s.add(twc)
                 s.delete(swc)
             else:
                 swc.character_id = target.id
