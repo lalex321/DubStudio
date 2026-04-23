@@ -416,6 +416,7 @@ async def project_detail(request: Request, project_id: int):
             {
                 "character_id": c.id,
                 "character": c.name,
+                "acknowledged": c.acknowledged,
                 "actor_id": actor[0] if actor else None,
                 "actor_name": actor[1] if actor else "",
                 "per_ep": per_ep,

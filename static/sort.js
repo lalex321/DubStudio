@@ -10,6 +10,7 @@
       const n = Number(raw);
       return isNaN(n) ? 0 : n;
     }
+    if (cell.dataset.sortValue !== undefined) return cell.dataset.sortValue.toLowerCase();
     const inp = cell.querySelector('input');
     const text = inp ? inp.value : cell.textContent;
     return (text || '').trim().toLowerCase();

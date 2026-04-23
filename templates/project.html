@@ -38,8 +38,8 @@
   </thead>
   <tbody>
     {% for row in rows %}
-    <tr data-character-id="{{ row.character_id }}">
-      <td class="sticky-l">{{ row.character }}</td>
+    <tr data-character-id="{{ row.character_id }}"{% if not row.acknowledged %} class="char-new"{% endif %}>
+      <td class="sticky-l char-name-cell" data-sort-value="{{ row.character }}">{% if not row.acknowledged %}<span class="char-new-badge" title="Новый персонаж после импорта">⚠</span>{% endif %}{{ row.character }}</td>
       <td class="sticky-l actor-col">
         <input
           class="actor-input"

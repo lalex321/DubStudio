@@ -531,6 +531,15 @@ a:hover { color: var(--primary-hover); }
 .actor-col { width: 140px; border-right: 1px solid var(--line-soft); }
 .grid-pivot .sticky-l:first-child { width: 1%; font-weight: 600; white-space: nowrap; }
 
+.grid-pivot tr.char-new .char-name-cell { color: var(--danger); }
+.char-new-badge {
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--danger);
+  font-weight: 700;
+  cursor: help;
+}
+
 .grid-pivot tfoot .foot-total td {
   padding: 5px 8px;
   background: var(--head);
