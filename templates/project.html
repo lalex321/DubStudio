@@ -39,7 +39,7 @@
   <tbody>
     {% for row in rows %}
     <tr data-character-id="{{ row.character_id }}"{% if not row.acknowledged %} class="char-new"{% endif %}>
-      <td class="sticky-l char-name-cell" data-sort-value="{{ row.character }}">{% if not row.acknowledged %}<span class="char-new-badge" title="Новый персонаж после импорта">⚠</span>{% endif %}{{ row.character }}</td>
+      <td class="sticky-l char-name-cell" data-sort-value="{{ row.character }}">{% if not row.acknowledged %}<span class="char-new-badge" title="Новый персонаж после импорта">⚠</span>{% endif %}{{ row.character }}{% if not row.acknowledged %} <button type="button" class="char-action-btn char-keep-btn" data-character-id="{{ row.character_id }}" title="Оставить как есть">✓</button>{% endif %}</td>
       <td class="sticky-l actor-col">
         <input
           class="actor-input"
@@ -286,6 +286,25 @@
       importForm.submit();
     });
   }
+
+  table.querySelectorAll('.char-keep-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const cid = btn.dataset.characterId;
+      btn.disabled = true;
+      try {
+        const r = await fetch(`/api/projects/${projectId}/characters/${cid}/acknowledge`, { method: 'POST' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const tr = btn.closest('tr');
+        tr.classList.remove('char-new');
+        tr.querySelector('.char-new-badge')?.remove();
+        btn.remove();
+      } catch (err) {
+        btn.disabled = false;
+        btn.classList.add('error');
+        console.error('acknowledge failed', err);
+      }
+    });
+  });
 
   const datalist = document.getElementById('actors-list');
   const knownActors = new Set(

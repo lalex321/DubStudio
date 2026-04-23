@@ -631,6 +631,20 @@ async def set_actor(request: Request, project_id: int, character_id: int):
         return JSONResponse({"actor_id": actor.id, "actor_name": actor.name})
 
 
+@app.post("/api/projects/{project_id}/characters/{character_id}/acknowledge")
+async def acknowledge_character(request: Request, project_id: int, character_id: int):
+    if not is_authenticated(request):
+        raise HTTPException(401)
+    with Session(engine) as s:
+        char = s.get(Character, character_id)
+        if not char or char.project_id != project_id:
+            raise HTTPException(404, "Персонаж не найден")
+        char.acknowledged = True
+        s.add(char)
+        s.commit()
+    return JSONResponse({"ok": True})
+
+
 @app.post("/api/projects/{project_id}/wordcount")
 async def set_wordcount(request: Request, project_id: int):
     if not is_authenticated(request):
