@@ -20,7 +20,7 @@
     <a href="/projects">Проекты</a>
     {% if is_admin %}<a href="/admin">Админ</a>{% endif %}
     <span class="user">{{ user }}</span>
-    <a class="muted" href="/logout">Выйти</a>
+    <form method="post" action="/logout" class="logout-form"><button type="submit" class="muted link-btn">Выйти</button></form>
     {% endif %}
     <button type="button" class="theme-toggle" id="theme-toggle" title="Сменить тему" aria-label="Сменить тему"></button>
   </nav>
