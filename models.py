@@ -46,6 +46,7 @@ class Character(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     project_id: int = Field(foreign_key="project.id", index=True)
     name: str
+    acknowledged: bool = True
 
 
 class Actor(SQLModel, table=True):
