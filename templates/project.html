@@ -278,19 +278,11 @@
     handle.addEventListener('click', (e) => e.stopPropagation());
   });
 
-  // Confirm on re-import if there are manual edits
   const importInput = document.getElementById('import-input');
   const importForm = document.getElementById('import-form');
   if (importInput && importForm) {
-    importInput.addEventListener('change', (ev) => {
+    importInput.addEventListener('change', () => {
       if (!importInput.files || !importInput.files.length) return;
-      const n = Number(importForm.dataset.editedCount) || 0;
-      if (n > 0) {
-        const ok = window.confirm(
-          `В проекте ${n} ручных правок в ячейках. Повторный импорт затрёт их в затронутых сериях. Продолжить?`
-        );
-        if (!ok) { importInput.value = ''; ev.preventDefault(); return; }
-      }
       importForm.submit();
     });
   }

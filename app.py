@@ -230,7 +230,7 @@ async def project_new_submit(request: Request, files: list[UploadFile]):
         s.add(project)
         s.commit()
         s.refresh(project)
-        _ingest_episodes(s, project.id, episodes, profile)
+        _ingest_episodes(s, project.id, episodes, profile, mark_new_unacknowledged=False)
         s.commit()
         project_id = project.id
 
@@ -254,6 +254,7 @@ def _ingest_episodes(
     project_id: int,
     episodes: dict,
     profile,
+    mark_new_unacknowledged: bool = True,
 ) -> None:
     for ep_num, data in episodes.items():
         episode = session.exec(
@@ -266,12 +267,6 @@ def _ingest_episodes(
             episode.imported_at = datetime.now(timezone.utc)
             session.add(episode)
             session.flush()
-            existing_wcs = list(
-                session.exec(select(WordCount).where(WordCount.episode_id == episode.id)).all()
-            )
-            for wc in existing_wcs:
-                session.delete(wc)
-            session.flush()
         else:
             episode = Episode(
                 project_id=project_id,
@@ -281,30 +276,66 @@ def _ingest_episodes(
             session.add(episode)
             session.flush()
 
+        xlsx_rows: dict[str, tuple[int, int, int]] = {}
         for r in data.rows:
             name_cell = r[profile.col_character]
             name = str(name_cell).strip() if name_cell else ""
             if not name:
                 continue
+            xlsx_rows[name] = (
+                _to_int(r[profile.col_dialog]),
+                _to_int(r[profile.col_transcription]),
+                _to_int(r[profile.col_total]),
+            )
+
+        char_by_name: dict[str, Character] = {}
+        for name in xlsx_rows:
             char = session.exec(
                 select(Character).where(
                     Character.project_id == project_id, Character.name == name
                 )
             ).first()
             if not char:
-                char = Character(project_id=project_id, name=name)
+                char = Character(
+                    project_id=project_id,
+                    name=name,
+                    acknowledged=not mark_new_unacknowledged,
+                )
                 session.add(char)
                 session.flush()
+            char_by_name[name] = char
 
-            session.add(
-                WordCount(
-                    episode_id=episode.id,
-                    character_id=char.id,
-                    dialog_wc=_to_int(r[profile.col_dialog]),
-                    transcription_wc=_to_int(r[profile.col_transcription]),
-                    total_wc=_to_int(r[profile.col_total]),
+        existing_wcs = list(
+            session.exec(select(WordCount).where(WordCount.episode_id == episode.id)).all()
+        )
+        existing_by_char_id = {wc.character_id: wc for wc in existing_wcs}
+        new_char_ids = {c.id for c in char_by_name.values()}
+
+        for name, (d, t, tot) in xlsx_rows.items():
+            char = char_by_name[name]
+            wc = existing_by_char_id.get(char.id)
+            if wc:
+                if wc.edited:
+                    continue
+                wc.dialog_wc = d
+                wc.transcription_wc = t
+                wc.total_wc = tot
+                session.add(wc)
+            else:
+                session.add(
+                    WordCount(
+                        episode_id=episode.id,
+                        character_id=char.id,
+                        dialog_wc=d,
+                        transcription_wc=t,
+                        total_wc=tot,
+                    )
                 )
-            )
+
+        for wc in existing_wcs:
+            if wc.character_id not in new_char_ids and not wc.edited:
+                session.delete(wc)
+
         session.flush()
 
 
