@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -67,6 +68,11 @@ def _flash(request: Request, message: str) -> None:
 
 def _pop_flash(request: Request) -> str:
     return request.session.pop("flash", "")
+
+
+def _attachment_header(filename: str) -> str:
+    ascii_fallback = filename.encode("ascii", "replace").decode("ascii").replace('"', "")
+    return f'attachment; filename="{ascii_fallback}"; filename*=UTF-8\'\'{quote(filename)}'
 
 
 @app.on_event("startup")
@@ -445,7 +451,7 @@ async def project_export(request: Request, project_id: int):
     return Response(
         content=blob,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": _attachment_header(filename)},
     )
 
 
@@ -493,7 +499,7 @@ async def project_report(request: Request, project_id: int):
     return Response(
         content=blob,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": _attachment_header(filename)},
     )
 
 
