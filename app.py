@@ -229,6 +229,18 @@ async def project_new_submit(request: Request, files: list[UploadFile]):
     return RedirectResponse(f"/projects/{project_id}", status_code=303)
 
 
+def _to_int(value) -> int:
+    if value is None or value == "":
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        try:
+            return int(float(str(value).replace(",", ".").strip()))
+        except (TypeError, ValueError):
+            return 0
+
+
 def _ingest_episodes(
     session: Session,
     project_id: int,
@@ -280,9 +292,9 @@ def _ingest_episodes(
                 WordCount(
                     episode_id=episode.id,
                     character_id=char.id,
-                    dialog_wc=int(r[profile.col_dialog] or 0),
-                    transcription_wc=int(r[profile.col_transcription] or 0),
-                    total_wc=int(r[profile.col_total] or 0),
+                    dialog_wc=_to_int(r[profile.col_dialog]),
+                    transcription_wc=_to_int(r[profile.col_transcription]),
+                    total_wc=_to_int(r[profile.col_total]),
                 )
             )
         session.flush()
