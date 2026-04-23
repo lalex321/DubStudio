@@ -39,7 +39,7 @@
   <tbody>
     {% for row in rows %}
     <tr data-character-id="{{ row.character_id }}"{% if not row.acknowledged %} class="char-new"{% endif %}>
-      <td class="sticky-l char-name-cell" data-sort-value="{{ row.character }}">{% if not row.acknowledged %}<span class="char-new-badge" title="Новый персонаж после импорта">⚠</span>{% endif %}{{ row.character }}{% if not row.acknowledged %} <button type="button" class="char-action-btn char-keep-btn" data-character-id="{{ row.character_id }}" title="Оставить как есть">✓</button><button type="button" class="char-action-btn char-merge-btn" data-character-id="{{ row.character_id }}" title="Слить с существующим">→</button><div class="merge-picker" hidden><input type="text" class="merge-picker-input" list="chars-list" placeholder="Слить с…"><button type="button" class="char-action-btn merge-confirm-btn">Объединить</button><button type="button" class="char-action-btn merge-cancel-btn" title="Отмена">✕</button></div>{% endif %}</td>
+      <td class="sticky-l char-name-cell" data-sort-value="{{ row.character }}">{% if not row.acknowledged %}<span class="char-new-badge" title="Новый персонаж после импорта">⚠</span>{% endif %}{{ row.character }}{% if not row.acknowledged %} <button type="button" class="char-action-btn char-keep-btn" data-character-id="{{ row.character_id }}" title="Оставить как есть">✓</button><button type="button" class="char-action-btn char-merge-btn" data-character-id="{{ row.character_id }}" title="Слить с существующим">→</button><button type="button" class="char-action-btn char-delete-btn danger" data-character-id="{{ row.character_id }}" data-character-name="{{ row.character }}" title="Удалить персонажа">✕</button><div class="merge-picker" hidden><input type="text" class="merge-picker-input" list="chars-list" placeholder="Слить с…"><button type="button" class="char-action-btn merge-confirm-btn">Объединить</button><button type="button" class="char-action-btn merge-cancel-btn" title="Отмена">✕</button></div>{% endif %}</td>
       <td class="sticky-l actor-col">
         <input
           class="actor-input"
@@ -334,6 +334,24 @@
       picker.setAttribute('hidden', '');
       picker.querySelector('.merge-picker-input').value = '';
       picker.classList.remove('error');
+    });
+  });
+
+  table.querySelectorAll('.char-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const cid = btn.dataset.characterId;
+      const name = btn.dataset.characterName;
+      if (!window.confirm(`Удалить персонажа «${name}» со всеми значениями?`)) return;
+      btn.disabled = true;
+      try {
+        const r = await fetch(`/api/projects/${projectId}/characters/${cid}/delete`, { method: 'POST' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        location.reload();
+      } catch (err) {
+        btn.disabled = false;
+        btn.classList.add('error');
+        console.error('delete failed', err);
+      }
     });
   });
 

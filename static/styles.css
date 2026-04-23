@@ -554,6 +554,8 @@ a:hover { color: var(--primary-hover); }
 }
 .char-action-btn:hover { color: var(--primary); border-color: var(--primary); }
 .char-action-btn.error { color: var(--danger); border-color: var(--danger); }
+.char-action-btn.danger { color: var(--danger); }
+.char-action-btn.danger:hover { color: var(--primary-fg); background: var(--danger); border-color: var(--danger); }
 .char-action-btn:disabled { opacity: 0.5; cursor: default; }
 
 .merge-picker {

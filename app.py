@@ -709,6 +709,27 @@ async def merge_character(request: Request, project_id: int, character_id: int):
     return JSONResponse({"ok": True, "target_id": target_id})
 
 
+@app.post("/api/projects/{project_id}/characters/{character_id}/delete")
+async def delete_character(request: Request, project_id: int, character_id: int):
+    if not is_authenticated(request):
+        raise HTTPException(401)
+    with Session(engine) as s:
+        char = s.get(Character, character_id)
+        if not char or char.project_id != project_id:
+            raise HTTPException(404, "Персонаж не найден")
+        for wc in s.exec(select(WordCount).where(WordCount.character_id == character_id)).all():
+            s.delete(wc)
+        for a in s.exec(
+            select(Assignment).where(
+                Assignment.project_id == project_id, Assignment.character_id == character_id
+            )
+        ).all():
+            s.delete(a)
+        s.delete(char)
+        s.commit()
+    return JSONResponse({"ok": True})
+
+
 @app.post("/api/projects/{project_id}/wordcount")
 async def set_wordcount(request: Request, project_id: int):
     if not is_authenticated(request):
