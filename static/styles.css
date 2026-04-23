@@ -64,6 +64,15 @@ a:hover { color: var(--primary-hover); }
 .muted { color: var(--muted); font-size: 12px; }
 .small { font-size: 12px; font-weight: 500; }
 .error { color: var(--danger); font-weight: 700; margin: 8px 0; }
+.flash {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, var(--panel));
+  color: var(--danger);
+  font-weight: 700;
+  border-radius: 6px;
+}
 
 /* ---------- topbar ---------- */
 .topbar {

@@ -43,9 +43,30 @@ from writer import build_actor_report_xlsx, build_project_xlsx
 BASE_DIR = Path(__file__).parent
 TEMPLATES = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+_UPLOAD_SLACK_BYTES = 1 * 1024 * 1024  # multipart overhead
+
 app = FastAPI(title="DubStudio")
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+
+
+def _upload_too_big(request: Request) -> bool:
+    cl = request.headers.get("content-length")
+    if not cl:
+        return False
+    try:
+        return int(cl) > MAX_UPLOAD_BYTES + _UPLOAD_SLACK_BYTES
+    except ValueError:
+        return False
+
+
+def _flash(request: Request, message: str) -> None:
+    request.session["flash"] = message
+
+
+def _pop_flash(request: Request) -> str:
+    return request.session.pop("flash", "")
 
 
 @app.on_event("startup")
@@ -73,6 +94,7 @@ def _render(request: Request, name: str, ctx: dict) -> HTMLResponse:
         "user": request.session.get("user"),
         "role": request.session.get("role"),
         "is_admin": is_admin(request),
+        "flash": _pop_flash(request),
         **ctx,
     }
     return TEMPLATES.TemplateResponse(request, name, ctx)
@@ -156,8 +178,20 @@ async def project_new_form(request: Request):
 async def project_new_submit(request: Request, files: list[UploadFile]):
     if (r := _require_auth(request)):
         return r
+    if _upload_too_big(request):
+        return _render(
+            request,
+            "project_new.html",
+            {"title": "Новый проект", "error": f"Файлы больше {MAX_UPLOAD_BYTES // (1024*1024)} МБ"},
+        )
     profile = PROFILES["default"]
     raw = [(f.filename or "", await f.read()) for f in files]
+    if sum(len(blob) for _, blob in raw) > MAX_UPLOAD_BYTES:
+        return _render(
+            request,
+            "project_new.html",
+            {"title": "Новый проект", "error": f"Файлы больше {MAX_UPLOAD_BYTES // (1024*1024)} МБ"},
+        )
     episodes, warnings = collect_episodes(raw, profile)
     if not episodes:
         return _render(
@@ -468,8 +502,14 @@ async def project_report(request: Request, project_id: int):
 async def project_import(request: Request, project_id: int, files: list[UploadFile]):
     if (r := _require_auth(request)):
         return r
+    if _upload_too_big(request):
+        _flash(request, f"Файлы больше {MAX_UPLOAD_BYTES // (1024*1024)} МБ — импорт отменён")
+        return RedirectResponse(f"/projects/{project_id}", status_code=303)
     profile = PROFILES["default"]
     raw = [(f.filename or "", await f.read()) for f in files]
+    if sum(len(blob) for _, blob in raw) > MAX_UPLOAD_BYTES:
+        _flash(request, f"Файлы больше {MAX_UPLOAD_BYTES // (1024*1024)} МБ — импорт отменён")
+        return RedirectResponse(f"/projects/{project_id}", status_code=303)
     episodes, _warnings = collect_episodes(raw, profile)
     if not episodes:
         return RedirectResponse(f"/projects/{project_id}", status_code=303)
