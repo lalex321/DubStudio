@@ -27,6 +27,16 @@
   ручная рассылка новых версий. Minusы multi-user: синхронизация между
   помрежами — либо через общий диск, либо через экспорт/импорт xlsx.
 
+## Операционка
+
+- **Сделать репо приватным, не сломав Render.** Render App по умолчанию
+  не имеет доступа к приватным репо; при visibility=private авто-деплой
+  отключается. Лечится один раз:
+  GitHub Settings → Installations → Render → Configure →
+  Repository access → либо "All repositories", либо добавить
+  `lalex321/DubStudio` в список выбранных. После этого можно безопасно
+  флипать `gh repo edit ... --visibility private`.
+
 ## Безопасность / TPN-like posture
 
 - Audit log ключевых операций (кто/когда удалил персонажа, слил, изменил WC).
