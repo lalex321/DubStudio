@@ -2,14 +2,20 @@
 {% block content %}
 <section class="page-head">
   <h1>Проекты</h1>
+  {% if is_admin and projects %}
+  <button id="delete-btn" type="button" class="btn btn-danger" disabled>Удалить (0)</button>
+  {% endif %}
   <a class="btn btn-primary" href="/projects/new">+ Добавить проект</a>
 </section>
 
 {% if projects %}
+<form id="delete-form" method="post" action="/projects/delete" class="inline-form"></form>
+
 <div class="grid-wrap">
 <table class="grid grid-natural" id="projects-grid">
   <thead>
     <tr>
+      {% if is_admin %}<th class="col-check"></th>{% endif %}
       <th class="col-num sortable" data-sort-type="num" data-sort-dir="asc">#<span class="sort-arrow">↑</span></th>
       <th class="sortable" data-sort-type="text">Название<span class="sort-arrow"></span></th>
       <th class="col-num sortable" data-sort-type="num">Эпизодов<span class="sort-arrow"></span></th>
@@ -18,18 +24,58 @@
   </thead>
   <tbody>
     {% for p in projects %}
-    <tr onclick="location.href='/projects/{{ p.id }}'">
-      <td class="col-num">{{ p.number }}</td>
-      <td>{{ p.title }}</td>
-      <td class="col-num">{{ p.episodes }}</td>
-      <td class="col-date">{{ p.start_date }}</td>
+    <tr data-project-id="{{ p.id }}" data-project-title="{{ p.title }}">
+      {% if is_admin %}<td class="col-check"><input type="checkbox" class="row-check" value="{{ p.id }}"></td>{% endif %}
+      <td class="col-num col-click">{{ p.number }}</td>
+      <td class="col-click">{{ p.title }}</td>
+      <td class="col-num col-click">{{ p.episodes }}</td>
+      <td class="col-date col-click">{{ p.start_date }}</td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 </div>
 <script src="{{ url_for('static', path='/sort.js') }}"></script>
-<script>attachSort(document.getElementById('projects-grid'));</script>
+<script>
+attachSort(document.getElementById('projects-grid'));
+
+document.querySelectorAll('#projects-grid .col-click').forEach(td => {
+  td.addEventListener('click', () => {
+    const id = td.closest('tr').dataset.projectId;
+    location.href = `/projects/${id}`;
+  });
+});
+
+{% if is_admin %}
+(function () {
+  const btn = document.getElementById('delete-btn');
+  const form = document.getElementById('delete-form');
+  const checks = document.querySelectorAll('.row-check');
+  const update = () => {
+    const n = document.querySelectorAll('.row-check:checked').length;
+    btn.textContent = `Удалить (${n})`;
+    btn.disabled = n === 0;
+  };
+  checks.forEach(c => c.addEventListener('change', update));
+  btn.addEventListener('click', () => {
+    const picked = Array.from(document.querySelectorAll('.row-check:checked'));
+    if (!picked.length) return;
+    const titles = picked.map(c => c.closest('tr').dataset.projectTitle);
+    const msg = `Удалить ${picked.length} проект(а): «${titles.join('», «')}»?\n\nСерии, персонажи, ручные правки будут потеряны.`;
+    if (!window.confirm(msg)) return;
+    form.innerHTML = '';
+    picked.forEach(c => {
+      const inp = document.createElement('input');
+      inp.type = 'hidden';
+      inp.name = 'project_ids';
+      inp.value = c.value;
+      form.appendChild(inp);
+    });
+    form.submit();
+  });
+})();
+{% endif %}
+</script>
 {% else %}
 <section class="empty">
   <p class="muted">Пока ни одного проекта.</p>

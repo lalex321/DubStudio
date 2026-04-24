@@ -205,6 +205,53 @@ async def projects_list(request: Request):
 
 
 # ---------- new project (upload) ----------
+@app.post("/projects/delete")
+async def projects_delete(request: Request):
+    if (r := _require_admin(request)):
+        return r
+    form = await request.form()
+    raw_ids = form.getlist("project_ids")
+    ids: list[int] = []
+    for v in raw_ids:
+        try:
+            ids.append(int(v))
+        except (TypeError, ValueError):
+            continue
+    if not ids:
+        return RedirectResponse("/projects", status_code=303)
+
+    deleted = 0
+    with Session(engine) as s:
+        for pid in ids:
+            project = s.get(Project, pid)
+            if not project:
+                continue
+            ep_ids = [
+                e.id for e in s.exec(select(Episode).where(Episode.project_id == pid)).all()
+            ]
+            if ep_ids:
+                for wc in s.exec(
+                    select(WordCount).where(WordCount.episode_id.in_(ep_ids))
+                ).all():
+                    s.delete(wc)
+                for e in s.exec(select(Episode).where(Episode.project_id == pid)).all():
+                    s.delete(e)
+            for a in s.exec(
+                select(Assignment).where(Assignment.project_id == pid)
+            ).all():
+                s.delete(a)
+            for c in s.exec(
+                select(Character).where(Character.project_id == pid)
+            ).all():
+                s.delete(c)
+            s.delete(project)
+            deleted += 1
+        s.commit()
+
+    _flash(request, f"Удалено проектов: {deleted}", level="success" if deleted else "error")
+    return RedirectResponse("/projects", status_code=303)
+
+
 @app.get("/projects/new", response_class=HTMLResponse)
 async def project_new_form(request: Request):
     if (r := _require_auth(request)):

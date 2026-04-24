@@ -201,6 +201,24 @@ a:hover { color: var(--primary-hover); }
   border-radius: 12px;
 }
 
+.btn-danger {
+  background: var(--panel);
+  border-color: var(--danger);
+  color: var(--danger);
+  padding: 8px 16px;
+  font-weight: 700;
+  font-size: 13px;
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: var(--primary-fg);
+  border-color: var(--danger);
+}
+
+.col-check { width: 28px; text-align: center; }
+.col-check input[type="checkbox"] { cursor: pointer; }
+.col-click { cursor: pointer; }
+
 .btn-ghost {
   background: transparent;
   border: 1px dashed var(--line);
