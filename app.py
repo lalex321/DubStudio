@@ -862,10 +862,10 @@ def _admin_context(session: Session, tab: str, error: str = "") -> dict:
 
 
 @app.get("/admin", response_class=HTMLResponse)
-async def admin_home(request: Request, tab: str = "users"):
+async def admin_home(request: Request, tab: str = "actors"):
     if (r := _require_admin(request)):
         return r
-    tab = tab if tab in ("users", "actors") else "users"
+    tab = tab if tab in ("users", "actors") else "actors"
     with Session(engine) as s:
         ctx = _admin_context(s, tab)
     return _render(request, "admin.html", ctx)

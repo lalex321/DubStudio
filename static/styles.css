@@ -130,11 +130,11 @@ a:hover { color: var(--primary-hover); }
 }
 
 /* ---------- topbar ---------- */
+/* Outer bar spans the full viewport (background, border, sticky) while the
+   inner container is clamped to the same max-width as .main, so the nav
+   cluster stays aligned with the right edge of the content column instead
+   of drifting away when the window is wide. */
 .topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 20px;
   color: var(--muted);
   font-weight: 700;
   background: var(--panel-trans);
@@ -143,6 +143,14 @@ a:hover { color: var(--primary-hover); }
   position: sticky;
   top: 0;
   z-index: 10;
+}
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 8px 20px;
 }
 .brand {
   font-weight: 900;
@@ -184,7 +192,7 @@ a:hover { color: var(--primary-hover); }
 .main {
   max-width: 1400px;
   margin: 16px auto;
-  padding: 0 20px;
+  padding: 0 20px 32px;
 }
 
 .page-head {
@@ -607,13 +615,14 @@ a:hover { color: var(--primary-hover); }
 
 .grid-pivot thead th,
 .grid-pivot tbody td {
-  padding: 3px 8px;
+  padding: 1px 8px;
   white-space: nowrap;
-  line-height: 1.3;
+  line-height: 1.2;
 }
 .grid-pivot thead th {
-  padding: 5px 8px;
+  padding: 4px 8px;
   font-size: 11px;
+  line-height: 1.3;
 }
 
 .grid-pivot .col-num { width: 1%; }
@@ -714,10 +723,10 @@ a:hover { color: var(--primary-hover); }
   background: transparent;
   border: 1px solid transparent;
   color: var(--text);
-  padding: 1px 6px;
+  padding: 0 6px;
   border-radius: 4px;
   font-size: 13px;
-  line-height: 1.3;
+  line-height: 1.2;
   outline: none;
   font-weight: 500;
 }
