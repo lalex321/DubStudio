@@ -730,13 +730,13 @@ a:hover { color: var(--primary-hover); }
   padding: 5px 8px;
   background: var(--head);
   border-top: 2px solid var(--line);
-  font-weight: 800;
+  font-weight: 900;
   color: var(--text);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  font-size: 11px;
+  font-size: 12px;
 }
-.grid-pivot tfoot .foot-total .col-num { font-size: 12px; letter-spacing: 0; text-transform: none; }
+.grid-pivot tfoot .foot-total .col-num { letter-spacing: 0; text-transform: none; }
 .grid-pivot tfoot .foot-total .sticky-l { background: var(--head); z-index: 2; }
 .grid-pivot tfoot .foot-total .total { background: var(--soft); }
 
