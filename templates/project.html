@@ -567,6 +567,111 @@
       }
     });
   }
+
+  // ---- Excel-style rectangular selection on the pivot ------------------
+  // Shift+click extends a rectangle from the last-focused/clicked cell.
+  // Cmd+C / Ctrl+C / Edit→Copy copies the block as TSV so it drops into
+  // Excel / Google Sheets as-is.
+  let anchorCell = null;
+
+  const cellValueForCopy = (td) => {
+    const metric = table.dataset.metric;
+    // Character column: clean name lives in data-sort-value (avoids the
+    // new-character badge + action buttons bleeding into the clipboard).
+    if (td.dataset.sortValue !== undefined) return td.dataset.sortValue;
+    const inp = td.querySelector('input');
+    if (inp) return (inp.value || '').trim();
+    // Metric-aware cells: read from the active metric's data attribute so
+    // what the user sees on screen is what gets copied.
+    if (metric && td.dataset[metric] !== undefined) {
+      const v = td.dataset[metric];
+      return (v && v !== '0') ? v : '';
+    }
+    return td.textContent.trim();
+  };
+
+  const clearRangeSelection = () => {
+    table.querySelectorAll('td.range-selected').forEach(el =>
+      el.classList.remove('range-selected')
+    );
+  };
+
+  const paintRectangle = (a, b) => {
+    clearRangeSelection();
+    if (!a || !b) return;
+    const tbody = a.closest('tbody');
+    if (!tbody || b.closest('tbody') !== tbody) return;
+    const rows = Array.from(tbody.rows);
+    const r1 = rows.indexOf(a.parentElement);
+    const r2 = rows.indexOf(b.parentElement);
+    if (r1 < 0 || r2 < 0) return;
+    const c1 = a.cellIndex;
+    const c2 = b.cellIndex;
+    const rMin = Math.min(r1, r2), rMax = Math.max(r1, r2);
+    const cMin = Math.min(c1, c2), cMax = Math.max(c1, c2);
+    for (let r = rMin; r <= rMax; r++) {
+      for (let c = cMin; c <= cMax; c++) {
+        const cell = rows[r].cells[c];
+        if (cell) cell.classList.add('range-selected');
+      }
+    }
+  };
+
+  // mousedown (not click) because we need to preventDefault BEFORE the
+  // browser focuses an <input> inside the clicked cell.
+  table.addEventListener('mousedown', (ev) => {
+    if (!ev.shiftKey) return;
+    const td = ev.target.closest('td');
+    if (!td || !td.closest('tbody')) return;
+    ev.preventDefault();
+    if (document.activeElement && document.activeElement.blur) {
+      document.activeElement.blur();
+    }
+    window.getSelection()?.removeAllRanges();
+    if (!anchorCell || !table.contains(anchorCell)) anchorCell = td;
+    paintRectangle(anchorCell, td);
+  });
+
+  // Plain click resets the anchor and clears the range; lets inputs
+  // focus normally for editing.
+  table.addEventListener('click', (ev) => {
+    if (ev.shiftKey) return;
+    const td = ev.target.closest('td');
+    if (!td || !td.closest('tbody')) return;
+    anchorCell = td;
+    clearRangeSelection();
+  });
+
+  // Escape drops the selection without moving focus.
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') clearRangeSelection();
+  });
+
+  // Focus leaving the pivot (e.g. click in topbar) abandons the range —
+  // prevents our copy handler from hijacking Cmd+C on unrelated UI.
+  document.addEventListener('focusin', (ev) => {
+    if (!table.contains(ev.target)) clearRangeSelection();
+  });
+
+  document.addEventListener('copy', (ev) => {
+    const selected = table.querySelectorAll('td.range-selected');
+    if (!selected.length) return;
+    // Group by current DOM row index so a sort after selection still
+    // produces readable output (rows in visual order).
+    const byRow = new Map();
+    selected.forEach(td => {
+      const r = td.parentElement.rowIndex;
+      if (!byRow.has(r)) byRow.set(r, []);
+      byRow.get(r).push(td);
+    });
+    const rowIdxs = Array.from(byRow.keys()).sort((a, b) => a - b);
+    const lines = rowIdxs.map(r => {
+      const cells = byRow.get(r).sort((a, b) => a.cellIndex - b.cellIndex);
+      return cells.map(cellValueForCopy).join('\t');
+    });
+    ev.preventDefault();
+    ev.clipboardData.setData('text/plain', lines.join('\n'));
+  });
 })();
 </script>
 {% else %}

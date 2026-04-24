@@ -790,6 +790,18 @@ a:hover { color: var(--primary-hover); }
 .col-copy-btn.copied { color: var(--success); border-color: var(--success); }
 .col-copy-btn.copied::after { content: " ✓"; }
 
+/* Excel-style rectangular selection on the pivot. Inputs inside cells
+   are transparent-bg so the tinted selection shows through. The inset
+   ring gives the "marching ants"-ish edge without animation. */
+.grid-pivot td.range-selected,
+.grid-pivot tbody tr:hover td.range-selected,
+.grid-pivot tbody tr:hover .sticky-l.range-selected {
+  background: var(--selected);
+}
+.grid-pivot td.range-selected {
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
 .merge-picker {
   display: flex;
   align-items: center;
