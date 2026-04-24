@@ -403,11 +403,11 @@ a:hover { color: var(--primary-hover); }
   top: 44px; /* stacks below .topbar */
   z-index: 2;
   background: var(--head);
-  color: var(--heading);
+  color: var(--text);
   font-weight: 700;
   text-align: left;
   padding: 6px 10px;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   border-bottom: 2px solid var(--line);
@@ -631,7 +631,7 @@ a:hover { color: var(--primary-hover); }
 }
 .grid-pivot thead th {
   padding: 4px 8px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.3;
 }
 
