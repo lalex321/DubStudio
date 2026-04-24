@@ -634,7 +634,7 @@ async def project_report(request: Request, project_id: int):
             }
             rows = sorted(
                 ((actor_names[aid], total) for aid, total in actor_total.items() if aid in actor_names),
-                key=lambda r: (-r[1], r[0].lower()),
+                key=lambda r: r[0].lower(),
             )
 
     blob = build_actor_report_xlsx(project.title, rows)

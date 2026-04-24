@@ -178,6 +178,11 @@ def build_actor_report_xlsx(
     tc = ws.cell(row=total_row, column=2, value=f"=SUM(B{start_row}:B{last_row})")
     tc.font, tc.fill, tc.alignment, tc.border = TOTAL_FONT, TOTAL_FILL, RIGHT, BORDER
 
+    # Excel sort/filter dropdowns on the header row. Range covers only the
+    # data block — the blank separator and TOTAL row below stay out of
+    # filter scope so TOTAL is never reordered or hidden by a filter.
+    ws.auto_filter.ref = f"A3:B{last_row}"
+
     ws.column_dimensions["A"].width = 32
     ws.column_dimensions["B"].width = 14
     ws.freeze_panes = "A4"
