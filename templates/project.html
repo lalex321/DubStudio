@@ -521,9 +521,26 @@
       const startIdx = allInputs.indexOf(inp);
       if (startIdx < 0) return;
       const count = Math.min(parts.length, allInputs.length - startIdx);
-      const msg = parts.length > count
+      // Warn before creating new Actor records — catches typos in the
+      // clipboard before the server auto-creates misspelled duplicates.
+      const willPaste = parts.slice(0, count);
+      const seen = new Set();
+      const newNames = [];
+      for (const n of willPaste) {
+        if (!n) continue;
+        const key = n.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (!knownActors.has(key)) newNames.push(n);
+      }
+      let msg = parts.length > count
         ? `Paste ${count} actors starting from this row?\n\nThe clipboard has ${parts.length} names — the last ${parts.length - count} won't fit and will be dropped.`
         : `Paste ${count} actors starting from this row, in the grid's current order?`;
+      if (newNames.length) {
+        const preview = newNames.slice(0, 10).join(', ');
+        const more = newNames.length > 10 ? ` (+${newNames.length - 10} more)` : '';
+        msg += `\n\nThis will CREATE ${newNames.length} new actor${newNames.length === 1 ? '' : 's'}: ${preview}${more}`;
+      }
       if (!window.confirm(msg)) return;
       for (let i = 0; i < count; i++) {
         const target = allInputs[startIdx + i];
