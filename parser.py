@@ -61,7 +61,10 @@ _FALLBACK_EPISODE_PATTERNS: list[re.Pattern[str]] = [
     re.compile(p, re.IGNORECASE)
     for p in [
         rf"{_NL}s\d+\s*e(\d+){_NR}",
-        rf"{_NL}episode\s*(\d+){_NR}",
+        # Netflix DUB_SCRIPT: "...Season1Episode10TheWolfWedding..." — цифра
+        # вплотную к названию серии, right-boundary не применим.
+        rf"{_NL}season\d+\s*episode\s*(\d+)",
+        rf"{_NL}episode\s*(\d+)",
         rf"{_NL}ep\.?\s*(\d+){_NR}",
         rf"{_NL}e(\d+){_NR}",
         r"(\d+)\s*серия",
