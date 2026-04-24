@@ -593,6 +593,10 @@ a:hover { color: var(--primary-hover); }
   border-color: var(--line);
 }
 
+/* Without this, `<div class="grid-wrap" hidden>` still paints: the
+   author-level `display: inline-block` below outranks the user-agent
+   `[hidden] { display: none }` rule. Re-assert it at author specificity. */
+.grid-wrap[hidden] { display: none; }
 .grid-wrap {
   display: inline-block;
   /* `overflow: clip` clips rounded corners WITHOUT creating a scroll
