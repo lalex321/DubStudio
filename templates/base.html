@@ -46,5 +46,21 @@
   {% if flash %}<div class="flash flash-{{ flash.level }}">{{ flash.msg }}</div>{% endif %}
   {% block content %}{% endblock %}
 </main>
+<script>
+// Keep any grid's sticky thead tucked below the topbar + the page's own
+// sticky top region (.project-top / .admin-top). Measured live so that
+// wrapping page-heads on narrow screens don't hide the header underneath.
+(function () {
+  const apply = () => {
+    const topbar = document.querySelector('.topbar');
+    const top = document.querySelector('.project-top, .admin-top');
+    const h = (topbar?.offsetHeight || 0) + (top?.offsetHeight || 0);
+    document.documentElement.style.setProperty('--sticky-head-top', h + 'px');
+  };
+  document.addEventListener('DOMContentLoaded', apply);
+  window.addEventListener('load', apply);
+  window.addEventListener('resize', apply);
+})();
+</script>
 </body>
 </html>

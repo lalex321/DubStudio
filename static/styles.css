@@ -233,6 +233,20 @@ a:hover { color: var(--primary-hover); }
 .project-top .page-head { margin: 0 0 6px; }
 .project-top .tabs { margin: 0; }
 
+/* Same idea as .project-top: keep the title and subtab switcher pinned
+   below the topbar while the grid scrolls underneath. */
+.admin-top {
+  position: sticky;
+  top: 44px;
+  z-index: 5;
+  background: var(--bg);
+  padding: 10px 0 4px;
+  margin: -16px 0 0;
+  max-width: 100%;
+}
+.admin-top .page-head { margin: 0 0 6px; }
+.admin-top .admin-subtabs { margin: 0; }
+
 /* ---------- buttons ---------- */
 .btn {
   display: inline-flex;
@@ -400,7 +414,10 @@ a:hover { color: var(--primary-hover); }
 }
 .grid thead th {
   position: sticky;
-  top: 44px; /* stacks below .topbar */
+  /* --sticky-head-top is set at runtime in base.html (topbar height plus
+     any .project-top / .admin-top sticky region). Fallback 44px matches a
+     plain page with just the topbar. */
+  top: var(--sticky-head-top, 44px);
   z-index: 2;
   background: var(--head);
   color: var(--text);
@@ -700,7 +717,6 @@ a:hover { color: var(--primary-hover); }
    and above the body's sticky-l column (1). */
 .grid-pivot thead th,
 .report-grid thead th {
-  top: var(--sticky-head-top, 140px);
   z-index: 3;
 }
 

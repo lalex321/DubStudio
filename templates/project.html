@@ -1,22 +1,5 @@
 {% extends "base.html" %}
 {% block content %}
-<script>
-// Track the combined height of .topbar + .project-top so the pivot grid's
-// sticky <thead> can tuck in right below them. Without this the thead slips
-// under the project header, because a hardcoded `top` can't account for
-// the page-head wrapping on narrow screens or extra action buttons.
-(function () {
-  const apply = () => {
-    const topbar = document.querySelector('.topbar');
-    const ptop = document.querySelector('.project-top');
-    const h = (topbar?.offsetHeight || 0) + (ptop?.offsetHeight || 0);
-    document.documentElement.style.setProperty('--sticky-head-top', h + 'px');
-  };
-  document.addEventListener('DOMContentLoaded', apply);
-  window.addEventListener('load', apply);
-  window.addEventListener('resize', apply);
-})();
-</script>
 <div class="project-top">
 <section class="page-head">
   <h1>{{ project.title }} <span class="muted small">#{{ project.number }}</span> <span class="muted small">· {{ project.start_date }} · Episodes: {{ episodes|length }}</span></h1>

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
+<div class="admin-top">
 <section class="page-head">
   <h1>Admin</h1>
 </section>
@@ -7,6 +8,7 @@
 <div class="admin-subtabs">
   <a class="admin-subtab-btn {% if tab == 'actors' %}active{% endif %}" href="/admin?tab=actors">Actors</a>
   <a class="admin-subtab-btn {% if tab == 'users' %}active{% endif %}" href="/admin?tab=users">Users</a>
+</div>
 </div>
 
 <div class="admin-pane">
