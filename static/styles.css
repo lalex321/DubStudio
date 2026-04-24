@@ -700,7 +700,7 @@ a:hover { color: var(--primary-hover); }
 .grid-pivot tbody tr:hover .sticky-l { background: var(--hover); }
 
 .actor-col { width: 140px; border-right: 1px solid var(--line-soft); }
-.grid-pivot .sticky-l:first-child { width: 1%; font-weight: 600; white-space: nowrap; }
+.grid-pivot .sticky-l:first-child { width: 1%; white-space: nowrap; }
 
 .grid-pivot tr.char-new .char-name-cell { color: var(--danger); }
 .char-new-badge {
