@@ -34,6 +34,9 @@ def _migrate_sqlite() -> None:
         char_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(character)"))]
         if "acknowledged" not in char_cols:
             conn.execute(text("ALTER TABLE character ADD COLUMN acknowledged BOOLEAN DEFAULT 1"))
+        actor_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(actor)"))]
+        if "tg" not in actor_cols:
+            conn.execute(text("ALTER TABLE actor ADD COLUMN tg TEXT DEFAULT ''"))
 
 
 def get_session() -> Session:

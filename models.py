@@ -52,6 +52,9 @@ class Character(SQLModel, table=True):
 class Actor(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(unique=True, index=True)
+    # Telegram handle without a leading @. Used later for notification
+    # delivery; empty string means no handle captured yet.
+    tg: str = ""
 
 
 class Assignment(SQLModel, table=True):

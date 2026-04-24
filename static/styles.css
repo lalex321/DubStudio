@@ -529,6 +529,9 @@ a:hover { color: var(--primary-hover); }
 .admin-grid tbody tr { cursor: default; }
 .admin-grid tbody tr:hover { background: transparent; }
 .admin-grid .col-actions { width: 90px; text-align: right; }
+/* # column: 2-3 digit actor/user id — the generic 90px from .grid is
+   overkill here and wastes horizontal room better given to the name. */
+.admin-grid .col-num { width: 48px; }
 /* Match the pivot grid's row density: 1px top/bottom padding keeps the
    inline rename input and delete button from inflating the row. */
 .admin-grid tbody td { padding: 1px 8px; line-height: 1.2; }
@@ -550,6 +553,27 @@ a:hover { color: var(--primary-hover); }
 .rename-input.saving { opacity: 0.55; }
 .rename-input.saved { border-color: var(--success); }
 .rename-input.error { border-color: var(--danger); }
+
+/* Telegram handle field: same inline-editable affordance as .rename-input
+   but narrower — handles are typically short. */
+.tg-input {
+  padding: 1px 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  outline: none;
+  width: 160px;
+}
+.tg-input::placeholder { color: var(--muted-2); font-weight: 500; }
+.tg-input:hover { border-color: var(--line-soft); }
+.tg-input:focus { border-color: var(--primary); background: var(--panel); }
+.tg-input.saving { opacity: 0.55; }
+.tg-input.saved { border-color: var(--success); }
+.tg-input.error { border-color: var(--danger); }
 .grid tbody td {
   padding: 3px 8px;
   border-bottom: 1px solid var(--line-soft);

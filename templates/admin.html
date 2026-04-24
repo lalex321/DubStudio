@@ -65,6 +65,7 @@
       <tr>
         <th class="col-num sortable" data-sort-type="num" data-sort-dir="asc">#<span class="sort-arrow">↑</span></th>
         <th class="sortable" data-sort-type="text">Name<span class="sort-arrow"></span></th>
+        <th class="sortable" data-sort-type="text" title="Telegram handle for notifications">TLG<span class="sort-arrow"></span></th>
         <th class="col-num sortable" data-sort-type="num">Assignments<span class="sort-arrow"></span></th>
         <th class="col-actions"></th>
       </tr>
@@ -80,6 +81,19 @@
             value="{{ a.name }}"
             data-actor-id="{{ a.id }}"
             data-initial="{{ a.name }}"
+          >
+        </td>
+        <td>
+          <input
+            type="text"
+            class="tg-input"
+            value="{{ a.tg }}"
+            placeholder="username"
+            data-actor-id="{{ a.id }}"
+            data-initial="{{ a.tg }}"
+            autocapitalize="off"
+            autocorrect="off"
+            spellcheck="false"
           >
         </td>
         <td class="col-num">{{ a.used }}</td>
@@ -108,50 +122,63 @@
   if (usersGrid) attachSort(usersGrid);
   if (actorsGrid) attachSort(actorsGrid);
 
-  // Autosave actor rename on blur / Enter. Escape reverts to the last
-  // persisted value. Server returns JSON when Accept: application/json.
-  document.querySelectorAll('.rename-input[data-actor-id]').forEach(inp => {
-    const save = async () => {
-      const next = inp.value.trim();
-      const prev = inp.dataset.initial || '';
-      if (next === prev) { inp.value = prev; return; }
-      if (!next) { inp.value = prev; return; }
-      inp.classList.remove('error', 'saved');
-      inp.classList.add('saving');
-      try {
-        const resp = await fetch(`/admin/actors/${inp.dataset.actorId}/rename`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Accept': 'application/json',
-          },
-          body: new URLSearchParams({ name: next }),
-        });
-        if (!resp.ok) {
-          let err = `HTTP ${resp.status}`;
-          try { const j = await resp.json(); if (j && j.error) err = j.error; } catch (_) {}
-          throw new Error(err);
+  // Generic autosave-on-blur/Enter for inline-editable actor fields.
+  // - rename: empty names revert to previous; clash returns 409
+  // - tg: empty is allowed (clears the handle)
+  const attachAutosave = (selector, url, field, opts = {}) => {
+    document.querySelectorAll(selector).forEach(inp => {
+      const normalize = opts.normalize || (v => v.trim());
+      const save = async () => {
+        const next = normalize(inp.value);
+        const prev = inp.dataset.initial || '';
+        if (next === prev) { inp.value = prev; return; }
+        if (!opts.allowEmpty && !next) { inp.value = prev; return; }
+        inp.classList.remove('error', 'saved');
+        inp.classList.add('saving');
+        try {
+          const resp = await fetch(url.replace(':id', inp.dataset.actorId), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Accept': 'application/json',
+            },
+            body: new URLSearchParams({ [field]: next }),
+          });
+          if (!resp.ok) {
+            let err = `HTTP ${resp.status}`;
+            try { const j = await resp.json(); if (j && j.error) err = j.error; } catch (_) {}
+            throw new Error(err);
+          }
+          inp.value = next;
+          inp.dataset.initial = next;
+          inp.classList.remove('saving');
+          inp.classList.add('saved');
+          setTimeout(() => inp.classList.remove('saved'), 600);
+        } catch (e) {
+          inp.classList.remove('saving');
+          inp.classList.add('error');
+          inp.value = prev;
+          inp.title = String(e.message || e);
         }
-        inp.dataset.initial = next;
-        inp.classList.remove('saving');
-        inp.classList.add('saved');
-        setTimeout(() => inp.classList.remove('saved'), 600);
-      } catch (e) {
-        inp.classList.remove('saving');
-        inp.classList.add('error');
-        inp.value = prev;
-        inp.title = String(e.message || e);
-      }
-    };
-    inp.addEventListener('blur', save);
-    inp.addEventListener('keydown', ev => {
-      if (ev.key === 'Enter') { ev.preventDefault(); inp.blur(); }
-      if (ev.key === 'Escape') {
-        inp.value = inp.dataset.initial || '';
-        inp.classList.remove('error');
-        inp.blur();
-      }
+      };
+      inp.addEventListener('blur', save);
+      inp.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter') { ev.preventDefault(); inp.blur(); }
+        if (ev.key === 'Escape') {
+          inp.value = inp.dataset.initial || '';
+          inp.classList.remove('error');
+          inp.blur();
+        }
+      });
     });
+  };
+
+  attachAutosave('.rename-input[data-actor-id]', '/admin/actors/:id/rename', 'name');
+  attachAutosave('.tg-input[data-actor-id]', '/admin/actors/:id/tg', 'tg', {
+    allowEmpty: true,
+    // Strip any leading @ the user typed; server normalizes again but
+    // this keeps the UI value tidy on successful save.
+    normalize: v => v.trim().replace(/^@+/, '').trim(),
   });
 })();
 </script>

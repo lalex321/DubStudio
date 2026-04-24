@@ -873,7 +873,10 @@ def _admin_context(session: Session, tab: str, error: str = "") -> dict:
         "title": "Admin",
         "tab": tab,
         "users": users,
-        "actors": [{"id": a.id, "name": a.name, "used": actor_usage.get(a.id, 0)} for a in actors],
+        "actors": [
+            {"id": a.id, "name": a.name, "tg": a.tg or "", "used": actor_usage.get(a.id, 0)}
+            for a in actors
+        ],
         "error": error,
     }
 
@@ -996,6 +999,24 @@ async def admin_actor_rename(request: Request, actor_id: int, name: str = Form(.
     if wants_json:
         return JSONResponse({"ok": True, "name": name})
     return RedirectResponse("/admin?tab=actors", status_code=303)
+
+
+@app.post("/admin/actors/{actor_id}/tg")
+async def admin_actor_set_tg(request: Request, actor_id: int, tg: str = Form("")):
+    if (r := _require_admin(request)):
+        return r
+    # Normalize: strip whitespace and a leading @ so the column holds bare
+    # handles (some Telegram APIs want the @, others don't — we store the
+    # canonical shape and let the notifier glue @ back on).
+    tg = tg.strip().lstrip("@").strip()
+    with Session(engine) as s:
+        actor = s.get(Actor, actor_id)
+        if not actor:
+            return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
+        actor.tg = tg
+        s.add(actor)
+        s.commit()
+    return JSONResponse({"ok": True, "tg": tg})
 
 
 @app.post("/admin/actors/{actor_id}/delete")
