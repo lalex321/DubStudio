@@ -638,6 +638,23 @@ a:hover { color: var(--primary-hover); }
   background: var(--soft);
 }
 
+/* Right-align numeric headers + cells so digits sit under the header text.
+   Sortable headers reserve 22px on the right for the sort arrow, so the
+   tbody/tfoot cells pad the same 22px to make the right edges line up. */
+.grid-pivot thead th.col-num { text-align: right; }
+.grid-pivot tbody td.col-num,
+.grid-pivot tfoot .col-num { text-align: right; padding-right: 22px; }
+
+/* EPs column is narrow and stays centered; also preserve the mixed-case
+   label (the default thead uppercases everything). */
+.grid-pivot thead th.col-eps,
+.grid-pivot tbody td.col-eps,
+.grid-pivot tfoot .col-eps {
+  text-align: center;
+  padding-right: 8px;
+}
+.grid-pivot thead th.col-eps { text-transform: none; letter-spacing: 0; }
+
 .sticky-l {
   position: sticky;
   left: 0;
@@ -737,12 +754,15 @@ a:hover { color: var(--primary-hover); }
   font-weight: 500;
 }
 .wc-input {
-  text-align: center;
+  text-align: right;
   font-variant-numeric: tabular-nums;
   padding: 0 2px;
   line-height: 1.1;
 }
-.wc-cell { padding: 0 2px !important; }
+/* Right padding makes the input's right edge line up with the 22px gap
+   the sortable thead reserves for its sort arrow; input's own 2px of
+   padding eats the last 2px so digits sit under the header text. */
+.wc-cell { padding: 0 20px 0 2px !important; }
 .wc-input:hover { border-color: var(--line-soft); }
 .wc-input:focus {
   border-color: var(--primary);
