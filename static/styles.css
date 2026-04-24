@@ -737,6 +737,11 @@ a:hover { color: var(--primary-hover); }
   font-size: 12px;
 }
 .grid-pivot tfoot .foot-total .col-num { letter-spacing: 0; text-transform: none; }
+/* Re-assert the 22px right pad so footer totals sit under the body digits.
+   Without this, the more-specific .foot-total td { padding: 5px 8px }
+   rule above wins and pulls the numbers 14px to the right. */
+.grid-pivot tfoot .foot-total td.col-num { padding-right: 22px; }
+.grid-pivot tfoot .foot-total td.col-eps { padding-right: 8px; }
 .grid-pivot tfoot .foot-total .sticky-l { background: var(--head); z-index: 2; }
 .grid-pivot tfoot .foot-total .total { background: var(--soft); }
 
