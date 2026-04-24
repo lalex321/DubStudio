@@ -19,10 +19,7 @@
 </script>
 <div class="project-top">
 <section class="page-head">
-  <div>
-    <a class="muted" href="/projects">← Projects</a>
-    <h1>{{ project.title }} <span class="muted small">#{{ project.number }}</span> <span class="muted small">· {{ project.start_date }} · Episodes: {{ episodes|length }}</span></h1>
-  </div>
+  <h1>{{ project.title }} <span class="muted small">#{{ project.number }}</span> <span class="muted small">· {{ project.start_date }} · Episodes: {{ episodes|length }}</span></h1>
   <div class="head-actions">
     <a class="btn" href="/projects/{{ project.id }}/report" title="Accounting report: actor → words (Transcription)">↓ Report</a>
     <a class="btn" href="/projects/{{ project.id }}/export" title="Download xlsx summary">↓ Export Excel</a>
