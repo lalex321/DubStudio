@@ -67,11 +67,26 @@ a:hover { color: var(--primary-hover); }
 .flash {
   margin: 0 0 12px;
   padding: 8px 12px;
-  border: 1px solid var(--danger);
-  background: color-mix(in srgb, var(--danger) 12%, var(--panel));
-  color: var(--danger);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
   font-weight: 700;
   border-radius: 6px;
+}
+.flash-error {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, var(--panel));
+  color: var(--danger);
+}
+.flash-success {
+  border-color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, var(--panel));
+  color: var(--success);
+}
+.flash-info {
+  border-color: var(--line);
+  background: var(--soft);
+  color: var(--text);
 }
 
 /* ---------- topbar ---------- */

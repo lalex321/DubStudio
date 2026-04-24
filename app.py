@@ -70,12 +70,36 @@ def _upload_too_big(request: Request) -> bool:
         return False
 
 
-def _flash(request: Request, message: str) -> None:
-    request.session["flash"] = message
+def _flash(request: Request, message: str, level: str = "error") -> None:
+    request.session["flash"] = {"msg": message, "level": level}
 
 
-def _pop_flash(request: Request) -> str:
-    return request.session.pop("flash", "")
+def _pop_flash(request: Request):
+    f = request.session.pop("flash", None)
+    if f is None:
+        return None
+    if isinstance(f, str):  # legacy payloads left in session
+        return {"msg": f, "level": "error"}
+    return f
+
+
+def _flash_import_summary(
+    request: Request, files_total: int, episodes_imported: int, warnings: list[str]
+) -> None:
+    if episodes_imported == 0:
+        msg = f"Импорт отменён: из {files_total} файлов не удалось распознать ни одной серии."
+        if warnings:
+            msg += " Причины: " + "; ".join(warnings[:5])
+        _flash(request, msg, level="error")
+        return
+    msg = f"Импортировано серий: {episodes_imported} из {files_total} файлов."
+    level = "success"
+    if warnings:
+        msg += " Предупреждения: " + "; ".join(warnings[:5])
+        if len(warnings) > 5:
+            msg += f" (+{len(warnings) - 5})"
+        level = "info"
+    _flash(request, msg, level=level)
 
 
 def _attachment_header(filename: str) -> str:
@@ -234,6 +258,7 @@ async def project_new_submit(request: Request, files: list[UploadFile]):
         s.commit()
         project_id = project.id
 
+    _flash_import_summary(request, len(raw), len(episodes), warnings)
     return RedirectResponse(f"/projects/{project_id}", status_code=303)
 
 
@@ -568,8 +593,9 @@ async def project_import(request: Request, project_id: int, files: list[UploadFi
     if sum(len(blob) for _, blob in raw) > MAX_UPLOAD_BYTES:
         _flash(request, f"Файлы больше {MAX_UPLOAD_BYTES // (1024*1024)} МБ — импорт отменён")
         return RedirectResponse(f"/projects/{project_id}", status_code=303)
-    episodes, _warnings = collect_episodes(raw, profile)
+    episodes, warnings = collect_episodes(raw, profile)
     if not episodes:
+        _flash_import_summary(request, len(raw), 0, warnings)
         return RedirectResponse(f"/projects/{project_id}", status_code=303)
     with Session(engine) as s:
         project = s.get(Project, project_id)
@@ -577,6 +603,7 @@ async def project_import(request: Request, project_id: int, files: list[UploadFi
             raise HTTPException(404, "Проект не найден")
         _ingest_episodes(s, project_id, episodes, profile)
         s.commit()
+    _flash_import_summary(request, len(raw), len(episodes), warnings)
     return RedirectResponse(f"/projects/{project_id}", status_code=303)
 
 

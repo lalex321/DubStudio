@@ -41,7 +41,7 @@
   })();
 </script>
 <main class="main">
-  {% if flash %}<div class="flash">{{ flash }}</div>{% endif %}
+  {% if flash %}<div class="flash flash-{{ flash.level }}">{{ flash.msg }}</div>{% endif %}
   {% block content %}{% endblock %}
 </main>
 </body>
