@@ -21,6 +21,14 @@
   const SHEET_NAME = "Word Count Summary";
   const PROJECT_INFO_SHEET = "Project Info";
   const TOTAL_MARKER = "TOTAL WORD COUNT BY TEXT CATEGORY";
+  // Production-metadata rows that Netflix includes in the sheet but are
+  // not characters. Matched case-insensitively on the trimmed cell. Keep
+  // in sync with _JUNK_CHARACTER_NAMES in app.py.
+  const JUNK_CHARACTER_NAMES = new Set([
+    "PRINCIPAL PHOTOGRAPHY",
+    "GRAPHICS INSERTS",
+    "MAIN TITLE",
+  ]);
   // Колонки: 0=character, 1=dialog, 2=transcription, 3=foreign,
   // 4=music, 5=burnedin, 6=onscreen, 7=total.
 
@@ -67,6 +75,7 @@
       if (!hasAny) continue;
       const first = String(r[0] ?? "").toUpperCase();
       if (first.includes(TOTAL_MARKER)) continue; // total-строку не грузим, сервер сам посчитает
+      if (JUNK_CHARACTER_NAMES.has(first.trim())) continue;
       if (r[0] !== null || r.slice(1).some((v) => v)) {
         data.push(r.slice(0, minWidth));
       }

@@ -338,6 +338,17 @@ def _to_int(value) -> int:
             return 0
 
 
+# Production-metadata rows in Netflix word-count sheets that should not be
+# treated as characters. Compared case-insensitively against the trimmed
+# character-name cell. Keep in sync with import_parser.js and the cleanup
+# migration in db._cleanup_junk_characters.
+_JUNK_CHARACTER_NAMES: set[str] = {
+    "PRINCIPAL PHOTOGRAPHY",
+    "GRAPHICS INSERTS",
+    "MAIN TITLE",
+}
+
+
 def _ingest_episodes(
     session: Session,
     project_id: int,
@@ -369,6 +380,11 @@ def _ingest_episodes(
         for r in data.rows:
             name_cell = r[profile.col_character]
             name = str(name_cell).strip() if name_cell else ""
+            # Netflix word-count sheets include production-metadata rows
+            # (main title card, photography, graphics inserts) that are
+            # not characters — drop them before counting.
+            if name.upper() in _JUNK_CHARACTER_NAMES:
+                continue
             if not name:
                 name = "(unnamed)"
             d = _to_int(r[profile.col_dialog])

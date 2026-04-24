@@ -18,6 +18,7 @@ engine = create_engine(
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
     _migrate_sqlite()
+    _cleanup_junk_characters()
 
 
 def _migrate_sqlite() -> None:
@@ -37,6 +38,41 @@ def _migrate_sqlite() -> None:
         actor_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(actor)"))]
         if "tg" not in actor_cols:
             conn.execute(text("ALTER TABLE actor ADD COLUMN tg TEXT DEFAULT ''"))
+
+
+# Netflix sheets contain rows for "PRINCIPAL PHOTOGRAPHY", "GRAPHICS INSERTS",
+# "MAIN TITLE" that were ingested as characters before the import filter
+# was added. Kept in sync with _JUNK_CHARACTER_NAMES in app.py.
+_JUNK_CHARACTER_NAMES = ("PRINCIPAL PHOTOGRAPHY", "GRAPHICS INSERTS", "MAIN TITLE")
+
+
+def _cleanup_junk_characters() -> None:
+    """One-shot cleanup of production-metadata rows that slipped into the
+    character table before the import filter existed. Idempotent — after
+    the first run the SELECTs return empty on every start."""
+    from sqlalchemy import text
+
+    with engine.begin() as conn:
+        for name in _JUNK_CHARACTER_NAMES:
+            ids = [
+                r[0] for r in conn.execute(
+                    text("SELECT id FROM character WHERE UPPER(TRIM(name)) = :n"),
+                    {"n": name},
+                )
+            ]
+            for cid in ids:
+                conn.execute(
+                    text("DELETE FROM wordcount WHERE character_id = :cid"),
+                    {"cid": cid},
+                )
+                conn.execute(
+                    text("DELETE FROM assignment WHERE character_id = :cid"),
+                    {"cid": cid},
+                )
+                conn.execute(
+                    text("DELETE FROM character WHERE id = :cid"),
+                    {"cid": cid},
+                )
 
 
 def get_session() -> Session:
