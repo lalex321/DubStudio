@@ -89,6 +89,21 @@ a:hover { color: var(--primary-hover); }
   color: var(--text);
 }
 
+.import-progress { margin: 12px 0; }
+.import-progress-bar {
+  height: 6px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.import-progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--primary);
+  transition: width 0.15s ease-out;
+}
+
 /* ---------- topbar ---------- */
 .topbar {
   display: flex;

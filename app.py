@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import quote
 
-from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -34,7 +34,7 @@ from models import (
 )
 from parser import (
     PROFILES,
-    collect_episodes,
+    EpisodeData,
     derive_common_name,
     derive_show_title,
 )
@@ -44,9 +44,6 @@ from writer import build_actor_report_xlsx, build_project_xlsx
 
 BASE_DIR = BUNDLE_DIR
 TEMPLATES = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-
-MAX_UPLOAD_BYTES = 20 * 1024 * 1024
-_UPLOAD_SLACK_BYTES = 1 * 1024 * 1024  # multipart overhead
 
 _SECURE_COOKIES = os.environ.get("DUBSTUDIO_SECURE_COOKIES", "").lower() in ("1", "true", "yes")
 
@@ -58,16 +55,6 @@ app.add_middleware(
     same_site="lax",
 )
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
-
-
-def _upload_too_big(request: Request) -> bool:
-    cl = request.headers.get("content-length")
-    if not cl:
-        return False
-    try:
-        return int(cl) > MAX_UPLOAD_BYTES + _UPLOAD_SLACK_BYTES
-    except ValueError:
-        return False
 
 
 def _flash(request: Request, message: str, level: str = "error") -> None:
@@ -252,6 +239,80 @@ async def projects_delete(request: Request):
     return RedirectResponse("/projects", status_code=303)
 
 
+def _episodes_from_payload(payload_episodes: list[dict]) -> dict[int, EpisodeData]:
+    """JSON из import_parser.js → dict[episode_num, EpisodeData]."""
+    out: dict[int, EpisodeData] = {}
+    for item in payload_episodes:
+        try:
+            ep_num = int(item.get("episode_num"))
+        except (TypeError, ValueError):
+            continue
+        raw_rows = item.get("rows") or []
+        rows: list[tuple] = []
+        for r in raw_rows:
+            if not isinstance(r, list):
+                continue
+            padded = list(r) + [None] * max(0, 8 - len(r))
+            rows.append(tuple(padded[:8]))
+        out[ep_num] = EpisodeData(
+            number=ep_num,
+            filename=str(item.get("filename") or f"episode-{ep_num}.xlsx"),
+            rows=rows,
+            total=None,
+            show_title=str(item.get("show_title") or "").strip(),
+        )
+    return out
+
+
+@app.post("/api/import-json")
+async def import_json(request: Request):
+    if not is_authenticated(request):
+        raise HTTPException(401)
+    body = await request.json()
+    project_id = body.get("project_id")
+    warnings: list[str] = list(body.get("warnings") or [])
+    payload_eps = body.get("episodes") or []
+    files_total = int(body.get("files_total") or len(payload_eps) + len(warnings))
+
+    episodes = _episodes_from_payload(payload_eps)
+    profile = PROFILES["default"]
+
+    if project_id is None:
+        if not episodes:
+            _flash_import_summary(request, files_total, 0, warnings)
+            return JSONResponse({"ok": False, "reason": "no-episodes"}, status_code=400)
+        title = derive_show_title(episodes)
+        if not title:
+            title = derive_common_name([d.filename for d in episodes.values()], profile)
+        if not title:
+            title = "Untitled"
+        with Session(engine) as s:
+            current_max = s.exec(select(func.coalesce(func.max(Project.number), 0))).one()
+            project = Project(number=current_max + 1, title=title)
+            s.add(project)
+            s.commit()
+            s.refresh(project)
+            _ingest_episodes(s, project.id, episodes, profile, mark_new_unacknowledged=False)
+            s.commit()
+            new_project_id = project.id
+        _flash_import_summary(request, files_total, len(episodes), warnings)
+        return JSONResponse({"ok": True, "project_id": new_project_id})
+
+    try:
+        pid = int(project_id)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Некорректный project_id")
+    with Session(engine) as s:
+        project = s.get(Project, pid)
+        if not project:
+            raise HTTPException(404, "Проект не найден")
+        if episodes:
+            _ingest_episodes(s, pid, episodes, profile)
+            s.commit()
+    _flash_import_summary(request, files_total, len(episodes), warnings)
+    return JSONResponse({"ok": True, "project_id": pid})
+
+
 @app.get("/projects/new", response_class=HTMLResponse)
 async def project_new_form(request: Request):
     if (r := _require_auth(request)):
@@ -259,54 +320,6 @@ async def project_new_form(request: Request):
     return _render(request, "project_new.html", {"title": "Новый проект"})
 
 
-@app.post("/projects/new", response_class=HTMLResponse)
-async def project_new_submit(request: Request, files: list[UploadFile]):
-    if (r := _require_auth(request)):
-        return r
-    if _upload_too_big(request):
-        return _render(
-            request,
-            "project_new.html",
-            {"title": "Новый проект", "error": f"Файлы больше {MAX_UPLOAD_BYTES // (1024*1024)} МБ"},
-        )
-    profile = PROFILES["default"]
-    raw = [(f.filename or "", await f.read()) for f in files]
-    if sum(len(blob) for _, blob in raw) > MAX_UPLOAD_BYTES:
-        return _render(
-            request,
-            "project_new.html",
-            {"title": "Новый проект", "error": f"Файлы больше {MAX_UPLOAD_BYTES // (1024*1024)} МБ"},
-        )
-    episodes, warnings = collect_episodes(raw, profile)
-    if not episodes:
-        return _render(
-            request,
-            "project_new.html",
-            {
-                "title": "Новый проект",
-                "error": "Не распознал ни одной серии. Проверь имена файлов.",
-                "warnings": warnings,
-            },
-        )
-
-    title = derive_show_title(episodes)
-    if not title:
-        title = derive_common_name([d.filename for d in episodes.values()], profile)
-    if not title:
-        title = "Untitled"
-
-    with Session(engine) as s:
-        current_max = s.exec(select(func.coalesce(func.max(Project.number), 0))).one()
-        project = Project(number=current_max + 1, title=title)
-        s.add(project)
-        s.commit()
-        s.refresh(project)
-        _ingest_episodes(s, project.id, episodes, profile, mark_new_unacknowledged=False)
-        s.commit()
-        project_id = project.id
-
-    _flash_import_summary(request, len(raw), len(episodes), warnings)
-    return RedirectResponse(f"/projects/{project_id}", status_code=303)
 
 
 def _to_int(value) -> int:
@@ -630,31 +643,6 @@ async def project_report(request: Request, project_id: int):
     )
 
 
-# ---------- add episodes to existing project ----------
-@app.post("/projects/{project_id}/import")
-async def project_import(request: Request, project_id: int, files: list[UploadFile]):
-    if (r := _require_auth(request)):
-        return r
-    if _upload_too_big(request):
-        _flash(request, f"Файлы больше {MAX_UPLOAD_BYTES // (1024*1024)} МБ — импорт отменён")
-        return RedirectResponse(f"/projects/{project_id}", status_code=303)
-    profile = PROFILES["default"]
-    raw = [(f.filename or "", await f.read()) for f in files]
-    if sum(len(blob) for _, blob in raw) > MAX_UPLOAD_BYTES:
-        _flash(request, f"Файлы больше {MAX_UPLOAD_BYTES // (1024*1024)} МБ — импорт отменён")
-        return RedirectResponse(f"/projects/{project_id}", status_code=303)
-    episodes, warnings = collect_episodes(raw, profile)
-    if not episodes:
-        _flash_import_summary(request, len(raw), 0, warnings)
-        return RedirectResponse(f"/projects/{project_id}", status_code=303)
-    with Session(engine) as s:
-        project = s.get(Project, project_id)
-        if not project:
-            raise HTTPException(404, "Проект не найден")
-        _ingest_episodes(s, project_id, episodes, profile)
-        s.commit()
-    _flash_import_summary(request, len(raw), len(episodes), warnings)
-    return RedirectResponse(f"/projects/{project_id}", status_code=303)
 
 
 # ---------- actor assignment API ----------

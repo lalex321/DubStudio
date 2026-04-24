@@ -9,13 +9,10 @@
   <div class="head-actions">
     <a class="btn" href="/projects/{{ project.id }}/report" title="Отчёт для бухгалтерии: актёр → слова (Transcription)">↓ Report</a>
     <a class="btn" href="/projects/{{ project.id }}/export" title="Скачать xlsx-сводку">↓ Export Excel</a>
-    <form id="import-form" method="post" action="/projects/{{ project.id }}/import" enctype="multipart/form-data" class="inline-form"
-          data-edited-count="{{ edited_count }}">
-      <label class="btn btn-ghost">
-        <input type="file" name="files" multiple accept=".xlsx" hidden id="import-input">
-        + Импортировать серии
-      </label>
-    </form>
+    <label class="btn btn-ghost" id="import-label">
+      <input type="file" multiple accept=".xlsx" hidden id="import-input">
+      + Импортировать серии
+    </label>
   </div>
 </section>
 
@@ -107,6 +104,8 @@
 </datalist>
 
 <script src="{{ url_for('static', path='/sort.js') }}"></script>
+<script src="{{ url_for('static', path='/xlsx.full.min.js') }}"></script>
+<script src="{{ url_for('static', path='/import_parser.js') }}"></script>
 <script>
 (function () {
   const table = document.getElementById('pivot');
@@ -283,11 +282,38 @@
   });
 
   const importInput = document.getElementById('import-input');
-  const importForm = document.getElementById('import-form');
-  if (importInput && importForm) {
-    importInput.addEventListener('change', () => {
+  const importLabel = document.getElementById('import-label');
+  if (importInput && importLabel) {
+    importInput.addEventListener('change', async () => {
       if (!importInput.files || !importInput.files.length) return;
-      importForm.submit();
+      const files = Array.from(importInput.files);
+      const originalText = importLabel.innerHTML;
+      importInput.disabled = true;
+      importLabel.textContent = `Обрабатываю 0/${files.length}…`;
+      try {
+        const { episodes, warnings } = await DubStudioImport.parseFiles(files, (done, total, name) => {
+          importLabel.textContent = name ? `${done}/${total}: ${name}` : `${done}/${total}`;
+        });
+        importLabel.textContent = 'Отправляю…';
+        const resp = await fetch('/api/import-json', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project_id: {{ project.id }},
+            episodes,
+            warnings,
+            files_total: files.length,
+          }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) throw new Error(data.reason || `HTTP ${resp.status}`);
+        location.reload();
+      } catch (e) {
+        alert(`Не удалось импортировать: ${e.message || e}`);
+        importInput.disabled = false;
+        importInput.value = '';
+        importLabel.innerHTML = originalText;
+      }
     });
   }
 

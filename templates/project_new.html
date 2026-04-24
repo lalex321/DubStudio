@@ -5,30 +5,80 @@
   <a class="muted" href="/projects">← Назад</a>
 </section>
 
-<p class="muted">Загрузите xlsx-файлы с wordcount по сериям. Название проекта определится автоматически из Project Info / имён файлов.</p>
+<p class="muted">Выберите xlsx-файлы с wordcount по сериям. Файлы обрабатываются в браузере, на сервер уходит только сводная информация (имена персонажей и числа).</p>
 
-<form id="import-form" method="post" action="/projects/new" enctype="multipart/form-data" class="form">
+<div class="form">
   <label class="drop">
-    <input id="files" type="file" name="files" multiple accept=".xlsx" required>
+    <input id="files" type="file" multiple accept=".xlsx">
     <span id="drop-label">Выбрать xlsx-файлы</span>
   </label>
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
-  {% if warnings %}
-  <ul class="warnings">
-    {% for w in warnings %}<li>{{ w }}</li>{% endfor %}
-  </ul>
-  {% endif %}
-</form>
+  <div id="import-progress" class="import-progress" hidden>
+    <div class="import-progress-bar"><div class="import-progress-fill" id="import-fill"></div></div>
+    <p class="muted small" id="import-status"></p>
+  </div>
+  <p id="import-error" class="error" hidden></p>
+</div>
+
+<script src="{{ url_for('static', path='/xlsx.full.min.js') }}"></script>
+<script src="{{ url_for('static', path='/import_parser.js') }}"></script>
 <script>
 (function () {
   const inp = document.getElementById('files');
-  const form = document.getElementById('import-form');
   const label = document.getElementById('drop-label');
-  inp.addEventListener('change', () => {
+  const progress = document.getElementById('import-progress');
+  const fill = document.getElementById('import-fill');
+  const status = document.getElementById('import-status');
+  const errEl = document.getElementById('import-error');
+
+  inp.addEventListener('change', async () => {
     if (!inp.files || !inp.files.length) return;
-    const names = Array.from(inp.files).map(f => f.name).join(', ');
-    label.textContent = `Импортирую: ${names}…`;
-    form.submit();
+    inp.disabled = true;
+    errEl.hidden = true;
+    progress.hidden = false;
+    const files = Array.from(inp.files);
+    label.textContent = `Обрабатываю ${files.length} файл(ов)…`;
+
+    const onProgress = (done, total, name) => {
+      const pct = total ? Math.round((done / total) * 100) : 0;
+      fill.style.width = pct + '%';
+      status.textContent = name ? `${done}/${total}: ${name}` : `${done}/${total}`;
+    };
+
+    try {
+      const { episodes, warnings } = await DubStudioImport.parseFiles(files, onProgress);
+      status.textContent = 'Отправляю на сервер…';
+      const resp = await fetch('/api/import-json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: null,
+          episodes,
+          warnings,
+          files_total: files.length,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.ok) {
+        if (data.reason === 'no-episodes') {
+          errEl.textContent = 'Не распознал ни одной серии. Проверь имена файлов.';
+          errEl.hidden = false;
+          status.textContent = '';
+          inp.disabled = false;
+          inp.value = '';
+          label.textContent = 'Выбрать xlsx-файлы';
+          progress.hidden = true;
+          return;
+        }
+        throw new Error(data.reason || `HTTP ${resp.status}`);
+      }
+      location.href = `/projects/${data.project_id}`;
+    } catch (e) {
+      errEl.textContent = `Не удалось импортировать: ${e.message || e}`;
+      errEl.hidden = false;
+      inp.disabled = false;
+      status.textContent = '';
+      progress.hidden = true;
+    }
   });
 })();
 </script>
