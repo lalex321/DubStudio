@@ -353,12 +353,15 @@ def _ingest_episodes(
             name_cell = r[profile.col_character]
             name = str(name_cell).strip() if name_cell else ""
             if not name:
-                continue
-            xlsx_rows[name] = (
-                _to_int(r[profile.col_dialog]),
-                _to_int(r[profile.col_transcription]),
-                _to_int(r[profile.col_total]),
-            )
+                name = "(unnamed)"
+            d = _to_int(r[profile.col_dialog])
+            t = _to_int(r[profile.col_transcription])
+            tot = _to_int(r[profile.col_total])
+            if name in xlsx_rows:
+                prev = xlsx_rows[name]
+                xlsx_rows[name] = (prev[0] + d, prev[1] + t, prev[2] + tot)
+            else:
+                xlsx_rows[name] = (d, t, tot)
 
         char_by_name: dict[str, Character] = {}
         for name in xlsx_rows:
