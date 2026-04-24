@@ -666,10 +666,28 @@ a:hover { color: var(--primary-hover); }
    height even if the page-head wraps on narrower screens. z-index stays
    under .project-top (5) so the thead tucks cleanly under it on any overlap,
    and above the body's sticky-l column (1). */
-.grid-pivot thead th {
+.grid-pivot thead th,
+.report-grid thead th {
   top: var(--sticky-head-top, 140px);
   z-index: 3;
 }
+
+/* Report tab — bookkeeper-facing Actor → Words preview of the xlsx report.
+   Right-align the numeric column under its sort-arrow-offset header, the
+   same treatment the pivot uses. */
+.grid td.col-words,
+.grid th.col-words { text-align: right; padding-right: 22px; }
+.report-grid tbody td { padding: 3px 10px; }
+.report-grid tfoot .foot-total td {
+  background: var(--head);
+  border-top: 2px solid var(--line);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+.report-grid tfoot .foot-total td.col-words { padding-right: 22px; }
 .grid-pivot thead .sticky-l { background: var(--head); z-index: 4; }
 .grid-pivot tbody tr:hover .sticky-l { background: var(--hover); }
 

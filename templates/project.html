@@ -75,13 +75,14 @@
 </script>
 
 <div class="tabs">
-  <button class="tab active" data-metric="transcription">Transcription WC</button>
-  <button class="tab" data-metric="dialog">Dialog WC</button>
+  <button class="tab active" data-view="pivot" data-metric="transcription">Transcription WC</button>
+  <button class="tab" data-view="pivot" data-metric="dialog">Dialog WC</button>
+  <button class="tab" data-view="report">Report</button>
 </div>
 </div>
 
 {% if rows %}
-<div class="grid-wrap">
+<div class="grid-wrap" id="pivot-wrap">
 <table class="grid grid-pivot" id="pivot" data-project-id="{{ project.id }}" data-metric="transcription">
   <thead>
     <tr>
@@ -154,6 +155,37 @@
 </table>
 </div>
 
+<div class="grid-wrap report-wrap" id="report-wrap" hidden>
+<table class="grid grid-natural report-grid" id="report-grid">
+  <thead>
+    <tr>
+      <th class="sortable" data-sort-type="text" data-sort-dir="asc">Actor<span class="sort-arrow">↑</span></th>
+      <th class="col-num col-words sortable" data-sort-type="num">Words<span class="sort-arrow"></span></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if report_rows %}
+      {% for rr in report_rows %}
+      <tr>
+        <td>{{ rr.actor }}</td>
+        <td class="col-num col-words">{{ rr.words or '' }}</td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="2" class="muted small" style="text-align:center; padding:14px;">No actor assignments yet. Assign actors on the Transcription WC tab to populate this report.</td></tr>
+    {% endif %}
+  </tbody>
+  {% if report_rows %}
+  <tfoot>
+    <tr class="foot-total">
+      <td>TOTAL</td>
+      <td class="col-num col-words">{{ report_total or '' }}</td>
+    </tr>
+  </tfoot>
+  {% endif %}
+</table>
+</div>
+
 <datalist id="actors-list">
   {% for a in actors %}<option value="{{ a }}">{% endfor %}
 </datalist>
@@ -168,7 +200,11 @@
   const table = document.getElementById('pivot');
   const projectId = table.dataset.projectId;
   const tabs = document.querySelectorAll('.tab');
+  const pivotWrap = document.getElementById('pivot-wrap');
+  const reportWrap = document.getElementById('report-wrap');
+  const reportGrid = document.getElementById('report-grid');
   attachSort(table);
+  if (reportGrid) attachSort(reportGrid);
 
   const setCellText = (td, metric) => {
     const v = td.dataset[metric];
@@ -192,7 +228,16 @@
   tabs.forEach(t => t.addEventListener('click', () => {
     tabs.forEach(x => x.classList.remove('active'));
     t.classList.add('active');
+    const view = t.dataset.view;
+    if (view === 'report') {
+      if (pivotWrap) pivotWrap.hidden = true;
+      if (reportWrap) reportWrap.hidden = false;
+      return;
+    }
+    if (pivotWrap) pivotWrap.hidden = false;
+    if (reportWrap) reportWrap.hidden = true;
     const metric = t.dataset.metric;
+    if (!metric) return;
     table.dataset.metric = metric;
     syncMetric(metric);
     if (table._resort) table._resort();

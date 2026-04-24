@@ -522,6 +522,21 @@ async def project_detail(request: Request, project_id: int):
         "totals": grand,
     }
 
+    # Bookkeeper report: same computation as /projects/{id}/report xlsx,
+    # but reusing the already-loaded rows[] so the third tab on the project
+    # page doesn't hit the database again.
+    actor_totals: dict[str, int] = {}
+    for r in rows:
+        name = r["actor_name"]
+        if not name:
+            continue
+        actor_totals[name] = actor_totals.get(name, 0) + r["totals"]["transcription"]
+    report_rows = [
+        {"actor": name, "words": words}
+        for name, words in sorted(actor_totals.items(), key=lambda x: x[0].lower())
+    ]
+    report_total = sum(x["words"] for x in report_rows)
+
     return _render(
         request,
         "project.html",
@@ -533,6 +548,8 @@ async def project_detail(request: Request, project_id: int):
             "footer": footer,
             "actors": [a.name for a in actors_all],
             "edited_count": edited_count,
+            "report_rows": report_rows,
+            "report_total": report_total,
         },
     )
 
