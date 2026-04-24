@@ -10,7 +10,7 @@
   const EPISODE_PATTERNS = [
     { re: new RegExp(`(\\d+)\\s*СЕРИЯ`, "i"), g: 1 },
     { re: new RegExp(`${NL}s\\d+\\s*e(\\d+)${NR}`, "i"), g: 1 },
-    { re: new RegExp(`${NL}season\\d+\\s*episode\\s*(\\d+)`, "i"), g: 1 },
+    { re: new RegExp(`season\\d+\\s*episode\\s*(\\d+)`, "i"), g: 1 },
     { re: new RegExp(`${NL}episode\\s*(\\d+)`, "i"), g: 1 },
     { re: new RegExp(`${NL}ep\\.?\\s*(\\d+)${NR}`, "i"), g: 1 },
     { re: new RegExp(`${NL}e(\\d+)${NR}`, "i"), g: 1 },

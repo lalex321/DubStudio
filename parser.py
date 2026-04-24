@@ -61,9 +61,11 @@ _FALLBACK_EPISODE_PATTERNS: list[re.Pattern[str]] = [
     re.compile(p, re.IGNORECASE)
     for p in [
         rf"{_NL}s\d+\s*e(\d+){_NR}",
-        # Netflix DUB_SCRIPT: "...Season1Episode10TheWolfWedding..." — цифра
-        # вплотную к названию серии, right-boundary не применим.
-        rf"{_NL}season\d+\s*episode\s*(\d+)",
+        # Netflix DUB_SCRIPT: "...MatingSeasonSeason1Episode10TheWolfWedding..."
+        # Слово Season может прилегать к названию сериала слева без
+        # разделителя, поэтому lookbehind не применяем; right-boundary
+        # тоже нет — цифра эпизода прилегает к титулу серии.
+        rf"season\d+\s*episode\s*(\d+)",
         rf"{_NL}episode\s*(\d+)",
         rf"{_NL}ep\.?\s*(\d+){_NR}",
         rf"{_NL}e(\d+){_NR}",
@@ -184,6 +186,22 @@ def derive_show_title(episodes: dict[int, EpisodeData]) -> str:
     return " / ".join(titles)
 
 
+_JUNK_TOKENS = {
+    "DUB", "SCRIPT", "SUB", "SUBS", "DUBBING",
+    "FINAL", "CUT", "APPROVED", "DRAFT", "TEMP", "ROUGH", "FULL",
+    "RU", "EN", "ES", "FR", "DE", "IT", "PT", "JA", "KO", "ZH", "PL", "TR",
+}
+_JUNK_TOKEN_RX = re.compile(r"^(?:v\d+(?:\.\d+)*|r\d+|ver\d*|\d+)$", re.IGNORECASE)
+
+
+def _is_junk_token(t: str) -> bool:
+    if t.upper() in _JUNK_TOKENS:
+        return True
+    if _JUNK_TOKEN_RX.match(t):
+        return True
+    return False
+
+
 def derive_common_name(filenames: list[str], profile: Profile) -> str:
     token_sets_upper: list[set[str]] = []
     reference: list[str] = []
@@ -192,7 +210,7 @@ def derive_common_name(filenames: list[str], profile: Profile) -> str:
         stem = Path(fname).stem
         det = _detect_episode(stem, profile.episode_pattern)
         stripped = det[1] if det is not None else stem
-        tokens = [t for t in re.split(r"\s+", stripped.strip()) if t]
+        tokens = [t for t in re.split(r"[\s_\-]+", stripped.strip()) if t]
         if i == 0:
             reference = tokens
         token_sets_upper.append({t.upper() for t in tokens})
@@ -202,4 +220,5 @@ def derive_common_name(filenames: list[str], profile: Profile) -> str:
 
     rest = token_sets_upper[1:]
     common = [t for t in reference if all(t.upper() in s for s in rest)]
+    common = [t for t in common if not _is_junk_token(t)]
     return " ".join(common).strip()
