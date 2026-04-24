@@ -67,7 +67,7 @@
   <thead>
     <tr>
       <th class="sticky-l sortable" data-sort-type="text" data-sort-dir="asc" data-col-key="character">Character<span class="sort-arrow">↑</span><span class="col-resize"></span></th>
-      <th class="sticky-l actor-col sortable" data-sort-type="text" data-col-key="actor">Actor<span class="sort-arrow"></span><span class="col-resize"></span></th>
+      <th class="sticky-l actor-col sortable" data-sort-type="text" data-col-key="actor">Actor<button type="button" class="col-copy-btn col-actor-copy" title="Copy all actor names to clipboard (one per line)">⎘</button><span class="sort-arrow"></span><span class="col-resize"></span></th>
       {% for n in episodes %}<th class="col-num sortable" data-sort-type="num" data-col-key="ep:{{ n }}">E{{ "%02d"|format(n) }}<span class="sort-arrow"></span><span class="col-resize"></span></th>{% endfor %}
       <th class="col-num total sortable" data-sort-type="num" data-col-key="total">Total<span class="sort-arrow"></span><span class="col-resize"></span></th>
       <th class="col-num col-eps sortable" data-sort-type="num" data-col-key="episodes" title="Episodes with non-zero word count">EPs<span class="sort-arrow"></span><span class="col-resize"></span></th>
@@ -461,50 +461,95 @@
     Array.from(datalist.options).map(o => o.value.toLowerCase())
   );
 
-  table.querySelectorAll('.actor-input').forEach(inp => {
-    const save = async () => {
-      const newVal = inp.value.trim();
-      if (newVal === (inp.dataset.initial || '')) return;
-      const row = inp.closest('tr');
-      const cid = row.dataset.characterId;
-      inp.classList.remove('error', 'saved');
-      inp.classList.add('saving');
-      try {
-        const res = await fetch(
-          `/api/projects/${projectId}/characters/${cid}/actor`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: newVal }),
-          }
-        );
-        if (!res.ok) throw new Error('save failed: ' + res.status);
-        const data = await res.json();
-        inp.value = data.actor_name || '';
-        inp.dataset.initial = inp.value;
-        if (data.actor_name && !knownActors.has(data.actor_name.toLowerCase())) {
-          const opt = document.createElement('option');
-          opt.value = data.actor_name;
-          datalist.appendChild(opt);
-          knownActors.add(data.actor_name.toLowerCase());
+  // Extracted so the column-paste handler below can await a sequential
+  // fill-down instead of firing N parallel POSTs through dispatched blur.
+  const saveActor = async (inp) => {
+    const newVal = inp.value.trim();
+    if (newVal === (inp.dataset.initial || '')) return;
+    const row = inp.closest('tr');
+    const cid = row.dataset.characterId;
+    inp.classList.remove('error', 'saved');
+    inp.classList.add('saving');
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/characters/${cid}/actor`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newVal }),
         }
-        inp.classList.remove('saving');
-        inp.classList.add('saved');
-        setTimeout(() => inp.classList.remove('saved'), 600);
-      } catch (e) {
-        console.error('Actor save failed', e);
-        inp.classList.remove('saving');
-        inp.classList.add('error');
-        // Revert to the last saved value so the user sees the change didn't go through
-        inp.value = inp.dataset.initial || '';
+      );
+      if (!res.ok) throw new Error('save failed: ' + res.status);
+      const data = await res.json();
+      inp.value = data.actor_name || '';
+      inp.dataset.initial = inp.value;
+      if (data.actor_name && !knownActors.has(data.actor_name.toLowerCase())) {
+        const opt = document.createElement('option');
+        opt.value = data.actor_name;
+        datalist.appendChild(opt);
+        knownActors.add(data.actor_name.toLowerCase());
       }
-    };
-    inp.addEventListener('blur', save);
+      inp.classList.remove('saving');
+      inp.classList.add('saved');
+      setTimeout(() => inp.classList.remove('saved'), 600);
+    } catch (e) {
+      console.error('Actor save failed', e);
+      inp.classList.remove('saving');
+      inp.classList.add('error');
+      inp.value = inp.dataset.initial || '';
+    }
+  };
+
+  table.querySelectorAll('.actor-input').forEach(inp => {
+    inp.addEventListener('blur', () => saveActor(inp));
     inp.addEventListener('keydown', ev => {
       if (ev.key === 'Enter') { ev.preventDefault(); inp.blur(); }
       if (ev.key === 'Escape') { inp.value = inp.dataset.initial || ''; inp.blur(); }
     });
+    // Column-paste from Excel / Google Sheets: if the clipboard contains
+    // multiple lines, treat it as a column and fill down starting from
+    // this row (in the current sort order). Single-line paste falls
+    // through to the browser default.
+    inp.addEventListener('paste', async ev => {
+      const text = (ev.clipboardData || window.clipboardData)?.getData('text') || '';
+      if (!text.includes('\n')) return;
+      ev.preventDefault();
+      const parts = text.split(/\r?\n/).map(s => s.trim());
+      while (parts.length && parts[parts.length - 1] === '') parts.pop();
+      if (!parts.length) return;
+      const allInputs = Array.from(table.querySelectorAll('tbody .actor-input'));
+      const startIdx = allInputs.indexOf(inp);
+      if (startIdx < 0) return;
+      const count = Math.min(parts.length, allInputs.length - startIdx);
+      const msg = parts.length > count
+        ? `Paste ${count} actors starting from this row?\n\nThe clipboard has ${parts.length} names — the last ${parts.length - count} won't fit and will be dropped.`
+        : `Paste ${count} actors starting from this row, in the grid's current order?`;
+      if (!window.confirm(msg)) return;
+      for (let i = 0; i < count; i++) {
+        const target = allInputs[startIdx + i];
+        target.value = parts[i];
+        await saveActor(target);
+      }
+    });
   });
+
+  // Column-copy: dump all actor names (current sort order) into the
+  // clipboard, one per line, ready to paste into Excel.
+  const actorCopyBtn = document.querySelector('.col-actor-copy');
+  if (actorCopyBtn) {
+    actorCopyBtn.addEventListener('click', async ev => {
+      ev.stopPropagation();  // don't trigger header sort
+      const inputs = table.querySelectorAll('tbody .actor-input');
+      const values = Array.from(inputs).map(i => (i.value || '').trim()).join('\n');
+      try {
+        await navigator.clipboard.writeText(values);
+        actorCopyBtn.classList.add('copied');
+        setTimeout(() => actorCopyBtn.classList.remove('copied'), 900);
+      } catch (e) {
+        alert('Clipboard write failed: ' + (e.message || e));
+      }
+    });
+  }
 })();
 </script>
 {% else %}

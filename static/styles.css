@@ -769,6 +769,27 @@ a:hover { color: var(--primary-hover); }
 .char-action-btn.danger:hover { color: var(--primary-fg); background: var(--danger); border-color: var(--danger); }
 .char-action-btn:disabled { opacity: 0.5; cursor: default; }
 
+/* Small icon button in a sortable column header to copy the column to
+   the clipboard. Sits between the label and the sort arrow. Stops click
+   propagation in JS so it doesn't trigger the sort listener. */
+.col-copy-btn {
+  margin-left: 6px;
+  padding: 0 5px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  vertical-align: middle;
+  text-transform: none;
+}
+.col-copy-btn:hover { color: var(--primary); border-color: var(--primary); }
+.col-copy-btn.copied { color: var(--success); border-color: var(--success); }
+.col-copy-btn.copied::after { content: " ✓"; }
+
 .merge-picker {
   display: flex;
   align-items: center;
