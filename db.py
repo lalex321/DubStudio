@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 from sqlmodel import Session, SQLModel, create_engine
 
-_DB_URL = os.environ.get("DUBSTUDIO_DB_URL", f"sqlite:///{Path(__file__).parent / 'dubstudio.db'}")
+from paths import DATA_DIR
+
+_DB_URL = os.environ.get("DUBSTUDIO_DB_URL", f"sqlite:///{DATA_DIR / 'dubstudio.db'}")
 
 engine = create_engine(
     _DB_URL,

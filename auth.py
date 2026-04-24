@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import os
 import secrets
-from pathlib import Path
 from typing import Optional
 
 import bcrypt
@@ -21,6 +20,7 @@ from sqlmodel import Session, select
 
 from db import engine
 from models import User
+from paths import DATA_DIR
 
 
 BOOTSTRAP_EMAIL = os.environ.get("DUBSTUDIO_ADMIN_EMAIL", "Sofi")
@@ -31,7 +31,7 @@ def _session_secret() -> str:
     env = os.environ.get("DUBSTUDIO_SESSION_SECRET")
     if env:
         return env
-    p = Path(__file__).parent / ".session_secret"
+    p = DATA_DIR / ".session_secret"
     if p.exists():
         return p.read_text().strip()
     s = secrets.token_urlsafe(32)

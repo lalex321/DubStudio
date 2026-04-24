@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
 
@@ -39,10 +38,11 @@ from parser import (
     derive_common_name,
     derive_show_title,
 )
+from paths import BUNDLE_DIR
 from writer import build_actor_report_xlsx, build_project_xlsx
 
 
-BASE_DIR = Path(__file__).parent
+BASE_DIR = BUNDLE_DIR
 TEMPLATES = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
