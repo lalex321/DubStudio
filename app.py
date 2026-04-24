@@ -74,15 +74,15 @@ def _flash_import_summary(
     request: Request, files_total: int, episodes_imported: int, warnings: list[str]
 ) -> None:
     if episodes_imported == 0:
-        msg = f"Импорт отменён: из {files_total} файлов не удалось распознать ни одной серии."
+        msg = f"Import cancelled: none of {files_total} files could be recognized as episodes."
         if warnings:
-            msg += " Причины: " + "; ".join(warnings[:5])
+            msg += " Reasons: " + "; ".join(warnings[:5])
         _flash(request, msg, level="error")
         return
-    msg = f"Импортировано серий: {episodes_imported} из {files_total} файлов."
+    msg = f"Imported episodes: {episodes_imported} of {files_total} files."
     level = "success"
     if warnings:
-        msg += " Предупреждения: " + "; ".join(warnings[:5])
+        msg += " Warnings: " + "; ".join(warnings[:5])
         if len(warnings) > 5:
             msg += f" (+{len(warnings) - 5})"
         level = "info"
@@ -110,7 +110,7 @@ def _require_admin(request: Request):
     if not is_authenticated(request):
         return RedirectResponse("/login", status_code=303)
     if not is_admin(request):
-        raise HTTPException(403, "Доступ только для администратора")
+        raise HTTPException(403, "Admins only")
     return None
 
 
@@ -137,7 +137,7 @@ async def home(request: Request):
 async def login_form(request: Request):
     if is_authenticated(request):
         return RedirectResponse("/projects", status_code=303)
-    return _render(request, "login.html", {"title": "Войти"})
+    return _render(request, "login.html", {"title": "Sign in"})
 
 
 @app.post("/login", response_class=HTMLResponse)
@@ -151,7 +151,7 @@ async def login_submit(
     return _render(
         request,
         "login.html",
-        {"title": "Войти", "error": "Неверный email или пароль", "email": email},
+        {"title": "Sign in", "error": "Wrong username or password", "email": email},
     )
 
 
@@ -188,7 +188,7 @@ async def projects_list(request: Request):
         }
         for p in projects
     ]
-    return _render(request, "projects.html", {"title": "Проекты", "projects": rows})
+    return _render(request, "projects.html", {"title": "Projects", "projects": rows})
 
 
 # ---------- new project (upload) ----------
@@ -235,12 +235,12 @@ async def projects_delete(request: Request):
             deleted += 1
         s.commit()
 
-    _flash(request, f"Удалено проектов: {deleted}", level="success" if deleted else "error")
+    _flash(request, f"Projects deleted: {deleted}", level="success" if deleted else "error")
     return RedirectResponse("/projects", status_code=303)
 
 
 def _episodes_from_payload(payload_episodes: list[dict]) -> dict[int, EpisodeData]:
-    """JSON из import_parser.js → dict[episode_num, EpisodeData]."""
+    """JSON from import_parser.js → dict[episode_num, EpisodeData]."""
     out: dict[int, EpisodeData] = {}
     for item in payload_episodes:
         try:
@@ -281,11 +281,15 @@ async def import_json(request: Request):
         if not episodes:
             _flash_import_summary(request, files_total, 0, warnings)
             return JSONResponse({"ok": False, "reason": "no-episodes"}, status_code=400)
-        title = derive_show_title(episodes)
-        if not title:
-            title = derive_common_name([d.filename for d in episodes.values()], profile)
-        if not title:
-            title = "Untitled"
+        override = str(body.get("project_title") or "").strip()
+        if override:
+            title = override
+        else:
+            title = derive_show_title(episodes)
+            if not title:
+                title = derive_common_name([d.filename for d in episodes.values()], profile)
+            if not title:
+                title = "Untitled"
         with Session(engine) as s:
             current_max = s.exec(select(func.coalesce(func.max(Project.number), 0))).one()
             project = Project(number=current_max + 1, title=title)
@@ -301,11 +305,11 @@ async def import_json(request: Request):
     try:
         pid = int(project_id)
     except (TypeError, ValueError):
-        raise HTTPException(400, "Некорректный project_id")
+        raise HTTPException(400, "Invalid project_id")
     with Session(engine) as s:
         project = s.get(Project, pid)
         if not project:
-            raise HTTPException(404, "Проект не найден")
+            raise HTTPException(404, "Project not found")
         if episodes:
             _ingest_episodes(s, pid, episodes, profile)
             s.commit()
@@ -317,7 +321,7 @@ async def import_json(request: Request):
 async def project_new_form(request: Request):
     if (r := _require_auth(request)):
         return r
-    return _render(request, "project_new.html", {"title": "Новый проект"})
+    return _render(request, "project_new.html", {"title": "New project"})
 
 
 
@@ -435,7 +439,7 @@ async def project_detail(request: Request, project_id: int):
     with Session(engine) as s:
         project = s.get(Project, project_id)
         if not project:
-            raise HTTPException(404, "Проект не найден")
+            raise HTTPException(404, "Project not found")
 
         episodes = list(
             s.exec(
@@ -541,7 +545,7 @@ async def project_export(request: Request, project_id: int):
     with Session(engine) as s:
         project = s.get(Project, project_id)
         if not project:
-            raise HTTPException(404, "Проект не найден")
+            raise HTTPException(404, "Project not found")
         episodes = list(
             s.exec(
                 select(Episode).where(Episode.project_id == project_id).order_by(Episode.number)
@@ -603,7 +607,7 @@ async def project_report(request: Request, project_id: int):
     with Session(engine) as s:
         project = s.get(Project, project_id)
         if not project:
-            raise HTTPException(404, "Проект не найден")
+            raise HTTPException(404, "Project not found")
         episode_ids = [
             e.id for e in s.exec(
                 select(Episode).where(Episode.project_id == project_id)
@@ -656,7 +660,7 @@ async def set_actor(request: Request, project_id: int, character_id: int):
     with Session(engine) as s:
         char = s.get(Character, character_id)
         if not char or char.project_id != project_id:
-            raise HTTPException(404, "Персонаж не найден")
+            raise HTTPException(404, "Character not found")
 
         existing = s.exec(
             select(Assignment).where(
@@ -703,7 +707,7 @@ async def acknowledge_character(request: Request, project_id: int, character_id:
     with Session(engine) as s:
         char = s.get(Character, character_id)
         if not char or char.project_id != project_id:
-            raise HTTPException(404, "Персонаж не найден")
+            raise HTTPException(404, "Character not found")
         char.acknowledged = True
         s.add(char)
         s.commit()
@@ -718,17 +722,17 @@ async def merge_character(request: Request, project_id: int, character_id: int):
     try:
         target_id = int(body.get("target_id") or 0)
     except (TypeError, ValueError):
-        raise HTTPException(400, "Некорректный target_id")
+        raise HTTPException(400, "Invalid target_id")
     if not target_id or target_id == character_id:
-        raise HTTPException(400, "Некорректный target_id")
+        raise HTTPException(400, "Invalid target_id")
 
     with Session(engine) as s:
         source = s.get(Character, character_id)
         target = s.get(Character, target_id)
         if not source or source.project_id != project_id:
-            raise HTTPException(404, "Персонаж не найден")
+            raise HTTPException(404, "Character not found")
         if not target or target.project_id != project_id:
-            raise HTTPException(404, "Целевой персонаж не найден")
+            raise HTTPException(404, "Target character not found")
 
         src_wcs = list(s.exec(select(WordCount).where(WordCount.character_id == source.id)).all())
         tgt_wcs_by_ep = {
@@ -782,7 +786,7 @@ async def delete_character(request: Request, project_id: int, character_id: int)
     with Session(engine) as s:
         char = s.get(Character, character_id)
         if not char or char.project_id != project_id:
-            raise HTTPException(404, "Персонаж не найден")
+            raise HTTPException(404, "Character not found")
         for wc in s.exec(select(WordCount).where(WordCount.character_id == character_id)).all():
             s.delete(wc)
         for a in s.exec(
@@ -805,7 +809,7 @@ async def set_wordcount(request: Request, project_id: int):
     episode_number = int(body.get("episode_number") or 0)
     metric = body.get("metric")
     if metric not in ("transcription", "dialog"):
-        raise HTTPException(400, "Неизвестная метрика")
+        raise HTTPException(400, "Unknown metric")
     try:
         value = max(0, int(body.get("value") or 0))
     except (TypeError, ValueError):
@@ -814,14 +818,14 @@ async def set_wordcount(request: Request, project_id: int):
     with Session(engine) as s:
         char = s.get(Character, character_id)
         if not char or char.project_id != project_id:
-            raise HTTPException(404, "Персонаж не найден")
+            raise HTTPException(404, "Character not found")
         episode = s.exec(
             select(Episode).where(
                 Episode.project_id == project_id, Episode.number == episode_number
             )
         ).first()
         if not episode:
-            raise HTTPException(404, "Серия не найдена")
+            raise HTTPException(404, "Episode not found")
         wc = s.exec(
             select(WordCount).where(
                 WordCount.episode_id == episode.id, WordCount.character_id == character_id
@@ -849,7 +853,7 @@ def _admin_context(session: Session, tab: str, error: str = "") -> dict:
         ).all()
     )
     return {
-        "title": "Админка",
+        "title": "Admin",
         "tab": tab,
         "users": users,
         "actors": [{"id": a.id, "name": a.name, "used": actor_usage.get(a.id, 0)} for a in actors],
@@ -885,7 +889,7 @@ async def admin_user_create(
     with Session(engine) as s:
         exists = s.exec(select(User).where(User.email == email)).first()
         if exists:
-            ctx = _admin_context(s, "users", error=f"Пользователь «{email}» уже есть")
+            ctx = _admin_context(s, "users", error=f"User \"{email}\" already exists")
             return _render(request, "admin.html", ctx)
         s.add(User(email=email, password_hash=hash_password(password), role=role))
         s.commit()
@@ -902,14 +906,14 @@ async def admin_user_delete(request: Request, user_id: int):
         if not user:
             return RedirectResponse("/admin?tab=users", status_code=303)
         if user.id == current_user_id:
-            ctx = _admin_context(s, "users", error="Нельзя удалить себя")
+            ctx = _admin_context(s, "users", error="Cannot delete yourself")
             return _render(request, "admin.html", ctx)
         if user.role == "admin":
             admin_count = s.exec(
                 select(func.count(User.id)).where(User.role == "admin")
             ).one()
             if admin_count <= 1:
-                ctx = _admin_context(s, "users", error="Нельзя удалить последнего админа")
+                ctx = _admin_context(s, "users", error="Cannot delete the last admin")
                 return _render(request, "admin.html", ctx)
         s.delete(user)
         s.commit()
@@ -930,7 +934,7 @@ async def admin_actor_create(request: Request, name: str = Form(...)):
             None,
         )
         if existing:
-            ctx = _admin_context(s, "actors", error=f"Актёр «{name}» уже есть")
+            ctx = _admin_context(s, "actors", error=f"Actor \"{name}\" already exists")
             return _render(request, "admin.html", ctx)
         s.add(Actor(name=name))
         s.commit()
@@ -957,7 +961,7 @@ async def admin_actor_rename(request: Request, actor_id: int, name: str = Form(.
             None,
         )
         if clash:
-            ctx = _admin_context(s, "actors", error=f"Имя «{name}» уже занято")
+            ctx = _admin_context(s, "actors", error=f"Name \"{name}\" already taken")
             return _render(request, "admin.html", ctx)
         actor.name = name
         s.add(actor)

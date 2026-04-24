@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="auth">
-  <h1>Войти</h1>
+  <h1>Sign in</h1>
   <form method="post" action="/login" class="form">
     <label>
-      <span>Имя</span>
+      <span>Username</span>
       <input type="text" name="email" value="{{ email|default('') }}" autofocus required autocomplete="username">
     </label>
     <label>
-      <span>Пароль</span>
+      <span>Password</span>
       <input type="password" name="password" required>
     </label>
     {% if error %}<p class="error">{{ error }}</p>{% endif %}
-    <button type="submit" class="btn btn-primary">Войти</button>
+    <button type="submit" class="btn btn-primary">Sign in</button>
   </form>
 </section>
 {% endblock %}

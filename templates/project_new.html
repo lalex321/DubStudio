@@ -1,21 +1,29 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="page-head">
-  <h1>Новый проект</h1>
-  <a class="muted" href="/projects">← Назад</a>
+  <h1>New project</h1>
+  <a class="muted" href="/projects">← Back</a>
 </section>
 
-<p class="muted">Выберите xlsx-файлы с wordcount по сериям. Файлы обрабатываются в браузере, на сервер уходит только сводная информация (имена персонажей и числа).</p>
+<p class="muted">Pick xlsx files with per-episode word count. Files are parsed in the browser; only aggregated data is sent to the server.</p>
 
 <div class="form">
   <label class="drop">
     <input id="files" type="file" multiple accept=".xlsx">
-    <span id="drop-label">Выбрать xlsx-файлы</span>
+    <span id="drop-label">Choose xlsx files</span>
   </label>
+
   <div id="import-progress" class="import-progress" hidden>
     <div class="import-progress-bar"><div class="import-progress-fill" id="import-fill"></div></div>
     <p class="muted small" id="import-status"></p>
   </div>
+
+  <div id="confirm-title" class="confirm-title" hidden>
+    <p class="muted small">Detected <span id="confirm-count">0</span> episodes. Confirm the project title:</p>
+    <input type="text" id="project-title" class="title-input" placeholder="Project title">
+    <button type="button" class="btn btn-primary" id="confirm-btn">Create project</button>
+  </div>
+
   <p id="import-error" class="error" hidden></p>
 </div>
 
@@ -29,14 +37,71 @@
   const fill = document.getElementById('import-fill');
   const status = document.getElementById('import-status');
   const errEl = document.getElementById('import-error');
+  const confirmBox = document.getElementById('confirm-title');
+  const confirmCount = document.getElementById('confirm-count');
+  const titleInput = document.getElementById('project-title');
+  const confirmBtn = document.getElementById('confirm-btn');
+
+  let parsedEpisodes = [];
+  let parsedWarnings = [];
+  let filesCount = 0;
+
+  const JUNK_UPPER = new Set([
+    'DUB','SCRIPT','SUB','SUBS','DUBBING',
+    'FINAL','CUT','APPROVED','DRAFT','TEMP','ROUGH','FULL',
+    'RU','EN','ES','FR','DE','IT','PT','JA','KO','ZH','PL','TR',
+  ]);
+  const JUNK_RX = /^(?:v\d+(?:\.\d+)*|r\d+|ver\d*|\d+)$/i;
+  const isJunk = (t) => JUNK_UPPER.has(t.toUpperCase()) || JUNK_RX.test(t);
+
+  const NL = '(?<![A-Za-z])';
+  const NR = '(?![A-Za-z])';
+  const EPISODE_PATTERNS = [
+    new RegExp(`(\\d+)\\s*СЕРИЯ`, 'i'),
+    new RegExp(`${NL}s\\d+\\s*e(\\d+)${NR}`, 'i'),
+    new RegExp(`season\\d+\\s*episode\\s*(\\d+)`, 'i'),
+    new RegExp(`${NL}episode\\s*(\\d+)`, 'i'),
+    new RegExp(`${NL}ep\\.?\\s*(\\d+)${NR}`, 'i'),
+    new RegExp(`${NL}e(\\d+)${NR}`, 'i'),
+    new RegExp(`(\\d+)\\s*серия`, 'i'),
+    new RegExp(`серия\\s*(\\d+)`, 'i'),
+    new RegExp(`^[\\s_-]*(\\d+)(?=[\\s_.\\-]|$)`),
+  ];
+
+  const stripEpisode = (stem) => {
+    for (const rx of EPISODE_PATTERNS) {
+      if (rx.test(stem)) return stem.replace(rx, ' ');
+    }
+    return stem;
+  };
+
+  const deriveTitle = (filenames) => {
+    if (!filenames.length) return '';
+    const tokenSets = [];
+    let reference = [];
+    filenames.forEach((fn, i) => {
+      const stem = fn.replace(/\.xlsx$/i, '');
+      const stripped = stripEpisode(stem).trim();
+      const tokens = stripped.split(/[\s_\-]+/).filter(Boolean);
+      if (i === 0) reference = tokens;
+      tokenSets.push(new Set(tokens.map(t => t.toUpperCase())));
+    });
+    const rest = tokenSets.slice(1);
+    const common = reference.filter(t =>
+      rest.every(s => s.has(t.toUpperCase())) && !isJunk(t)
+    );
+    return common.join(' ').trim();
+  };
 
   inp.addEventListener('change', async () => {
     if (!inp.files || !inp.files.length) return;
     inp.disabled = true;
     errEl.hidden = true;
+    confirmBox.hidden = true;
     progress.hidden = false;
     const files = Array.from(inp.files);
-    label.textContent = `Обрабатываю ${files.length} файл(ов)…`;
+    filesCount = files.length;
+    label.textContent = `Parsing ${files.length} file(s)…`;
 
     const onProgress = (done, total, name) => {
       const pct = total ? Math.round((done / total) * 100) : 0;
@@ -46,38 +111,67 @@
 
     try {
       const { episodes, warnings } = await DubStudioImport.parseFiles(files, onProgress);
-      status.textContent = 'Отправляю на сервер…';
+      parsedEpisodes = episodes;
+      parsedWarnings = warnings;
+      if (!episodes.length) {
+        errEl.textContent = 'No episodes recognized. Check the filenames.' +
+          (warnings.length ? ' ' + warnings.slice(0, 3).join('; ') : '');
+        errEl.hidden = false;
+        inp.disabled = false;
+        inp.value = '';
+        label.textContent = 'Choose xlsx files';
+        progress.hidden = true;
+        return;
+      }
+      // Title candidate: show_title from xlsx, else derive from filenames.
+      let candidate = '';
+      const titles = [...new Set(episodes.map(e => (e.show_title || '').trim()).filter(Boolean))];
+      if (titles.length === 1) candidate = titles[0];
+      else if (titles.length > 1) candidate = titles.join(' / ');
+      if (!candidate) candidate = deriveTitle(episodes.map(e => e.filename)) || 'Untitled';
+
+      confirmCount.textContent = episodes.length;
+      titleInput.value = candidate;
+      confirmBox.hidden = false;
+      progress.hidden = true;
+      titleInput.focus();
+      titleInput.select();
+    } catch (e) {
+      errEl.textContent = `Failed to import: ${e.message || e}`;
+      errEl.hidden = false;
+      inp.disabled = false;
+      progress.hidden = true;
+    }
+  });
+
+  confirmBtn.addEventListener('click', async () => {
+    const title = titleInput.value.trim();
+    if (!title) {
+      titleInput.focus();
+      return;
+    }
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Creating…';
+    try {
       const resp = await fetch('/api/import-json', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project_id: null,
-          episodes,
-          warnings,
-          files_total: files.length,
+          project_title: title,
+          episodes: parsedEpisodes,
+          warnings: parsedWarnings,
+          files_total: filesCount,
         }),
       });
       const data = await resp.json();
-      if (!resp.ok || !data.ok) {
-        if (data.reason === 'no-episodes') {
-          errEl.textContent = 'Не распознал ни одной серии. Проверь имена файлов.';
-          errEl.hidden = false;
-          status.textContent = '';
-          inp.disabled = false;
-          inp.value = '';
-          label.textContent = 'Выбрать xlsx-файлы';
-          progress.hidden = true;
-          return;
-        }
-        throw new Error(data.reason || `HTTP ${resp.status}`);
-      }
+      if (!resp.ok || !data.ok) throw new Error(data.reason || `HTTP ${resp.status}`);
       location.href = `/projects/${data.project_id}`;
     } catch (e) {
-      errEl.textContent = `Не удалось импортировать: ${e.message || e}`;
+      errEl.textContent = `Failed to create project: ${e.message || e}`;
       errEl.hidden = false;
-      inp.disabled = false;
-      status.textContent = '';
-      progress.hidden = true;
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Create project';
     }
   });
 })();

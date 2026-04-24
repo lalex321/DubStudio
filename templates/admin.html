@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="page-head">
-  <h1>Админка</h1>
+  <h1>Admin</h1>
 </section>
 
 <div class="admin-subtabs">
@@ -14,13 +14,13 @@
 
   {% if tab == 'users' %}
   <form method="post" action="/admin/users" class="admin-add-form">
-    <input type="text" name="email" placeholder="Имя / email" required>
-    <input type="password" name="password" placeholder="Пароль" required>
+    <input type="text" name="email" placeholder="Username / email" required>
+    <input type="password" name="password" placeholder="Password" required>
     <select name="role">
       <option value="assistant_director">assistant_director</option>
       <option value="admin">admin</option>
     </select>
-    <button type="submit" class="admin-btn">+ Добавить</button>
+    <button type="submit" class="admin-btn">+ Add</button>
   </form>
 
   <div class="grid-wrap">
@@ -28,9 +28,9 @@
     <thead>
       <tr>
         <th class="col-num">#</th>
-        <th>Имя / email</th>
-        <th>Роль</th>
-        <th class="col-date">Создан</th>
+        <th>Username / email</th>
+        <th>Role</th>
+        <th class="col-date">Created</th>
         <th class="col-actions"></th>
       </tr>
     </thead>
@@ -43,8 +43,8 @@
         <td class="col-date">{{ u.created_at.strftime('%Y-%m-%d') }}</td>
         <td class="col-actions">
           <form method="post" action="/admin/users/{{ u.id }}/delete" class="inline-form"
-                onsubmit="return confirm('Удалить пользователя {{ u.email }}?')">
-            <button type="submit" class="admin-btn ghost danger">Удалить</button>
+                onsubmit="return confirm('Delete user {{ u.email }}?')">
+            <button type="submit" class="admin-btn ghost danger">Delete</button>
           </form>
         </td>
       </tr>
@@ -55,8 +55,8 @@
 
   {% else %}
   <form method="post" action="/admin/actors" class="admin-add-form">
-    <input type="text" name="name" placeholder="Имя актёра" required>
-    <button type="submit" class="admin-btn">+ Добавить</button>
+    <input type="text" name="name" placeholder="Actor name" required>
+    <button type="submit" class="admin-btn">+ Add</button>
   </form>
 
   <div class="grid-wrap">
@@ -64,8 +64,8 @@
     <thead>
       <tr>
         <th class="col-num">#</th>
-        <th>Имя</th>
-        <th class="col-num">Назначений</th>
+        <th>Name</th>
+        <th class="col-num">Assignments</th>
         <th class="col-actions"></th>
       </tr>
     </thead>
@@ -76,17 +76,17 @@
         <td>
           <form method="post" action="/admin/actors/{{ a.id }}/rename" class="inline-form rename-form">
             <input type="text" name="name" value="{{ a.name }}" class="rename-input">
-            <button type="submit" class="admin-btn ghost">Переименовать</button>
+            <button type="submit" class="admin-btn ghost">Rename</button>
           </form>
         </td>
         <td class="col-num">{{ a.used }}</td>
         <td class="col-actions">
           <form method="post" action="/admin/actors/{{ a.id }}/delete" class="inline-form"
                 onsubmit="return confirm(
-                  {% if a.used %}'Удалить актёра «{{ a.name }}»? Он назначен в {{ a.used }} проект(а/ов) — назначения будут удалены.'
-                  {% else %}'Удалить актёра «{{ a.name }}»?'{% endif %}
+                  {% if a.used %}'Delete actor "{{ a.name }}"? They are assigned in {{ a.used }} project(s) — assignments will be removed.'
+                  {% else %}'Delete actor "{{ a.name }}"?'{% endif %}
                 )">
-            <button type="submit" class="admin-btn ghost danger">Удалить</button>
+            <button type="submit" class="admin-btn ghost danger">Delete</button>
           </form>
         </td>
       </tr>

@@ -1,24 +1,83 @@
 {% extends "base.html" %}
 {% block content %}
+<script>
+// Track the combined height of .topbar + .project-top so the pivot grid's
+// sticky <thead> can tuck in right below them. Without this the thead slips
+// under the project header, because a hardcoded `top` can't account for
+// the page-head wrapping on narrow screens or extra action buttons.
+(function () {
+  const apply = () => {
+    const topbar = document.querySelector('.topbar');
+    const ptop = document.querySelector('.project-top');
+    const h = (topbar?.offsetHeight || 0) + (ptop?.offsetHeight || 0);
+    document.documentElement.style.setProperty('--sticky-head-top', h + 'px');
+  };
+  document.addEventListener('DOMContentLoaded', apply);
+  window.addEventListener('load', apply);
+  window.addEventListener('resize', apply);
+})();
+</script>
+<div class="project-top">
 <section class="page-head">
   <div>
-    <a class="muted" href="/projects">← Проекты</a>
-    <h1>{{ project.title }} <span class="muted small">#{{ project.number }}</span></h1>
-    <p class="muted small">Начало: {{ project.start_date }} · Эпизодов: {{ episodes|length }}</p>
+    <a class="muted" href="/projects">← Projects</a>
+    <h1>{{ project.title }} <span class="muted small">#{{ project.number }}</span> <span class="muted small">· {{ project.start_date }} · Episodes: {{ episodes|length }}</span></h1>
   </div>
   <div class="head-actions">
-    <a class="btn" href="/projects/{{ project.id }}/report" title="Отчёт для бухгалтерии: актёр → слова (Transcription)">↓ Report</a>
-    <a class="btn" href="/projects/{{ project.id }}/export" title="Скачать xlsx-сводку">↓ Export Excel</a>
+    <a class="btn" href="/projects/{{ project.id }}/report" title="Accounting report: actor → words (Transcription)">↓ Report</a>
+    <a class="btn" href="/projects/{{ project.id }}/export" title="Download xlsx summary">↓ Export Excel</a>
     <label class="btn btn-ghost" id="import-label">
       <input type="file" multiple accept=".xlsx" hidden id="import-input">
-      + Импортировать серии
+      + Import episodes
     </label>
   </div>
 </section>
 
+<script src="{{ url_for('static', path='/xlsx.full.min.js') }}"></script>
+<script src="{{ url_for('static', path='/import_parser.js') }}"></script>
+<script>
+(function () {
+  const importInput = document.getElementById('import-input');
+  const importLabel = document.getElementById('import-label');
+  if (!importInput || !importLabel) return;
+  importInput.addEventListener('change', async () => {
+    if (!importInput.files || !importInput.files.length) return;
+    const files = Array.from(importInput.files);
+    const originalText = importLabel.innerHTML;
+    importInput.disabled = true;
+    importLabel.textContent = `Parsing 0/${files.length}…`;
+    try {
+      const { episodes, warnings } = await DubStudioImport.parseFiles(files, (done, total, name) => {
+        importLabel.textContent = name ? `${done}/${total}: ${name}` : `${done}/${total}`;
+      });
+      importLabel.textContent = 'Uploading…';
+      const resp = await fetch('/api/import-json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: {{ project.id }},
+          episodes,
+          warnings,
+          files_total: files.length,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.ok) throw new Error(data.reason || `HTTP ${resp.status}`);
+      location.reload();
+    } catch (e) {
+      alert(`Failed to import: ${e.message || e}`);
+      importInput.disabled = false;
+      importInput.value = '';
+      importLabel.innerHTML = originalText;
+    }
+  });
+})();
+</script>
+
 <div class="tabs">
   <button class="tab active" data-metric="transcription">Transcription WC</button>
   <button class="tab" data-metric="dialog">Dialog WC</button>
+</div>
 </div>
 
 {% if rows %}
@@ -26,8 +85,8 @@
 <table class="grid grid-pivot" id="pivot" data-project-id="{{ project.id }}" data-metric="transcription">
   <thead>
     <tr>
-      <th class="sticky-l sortable" data-sort-type="text" data-sort-dir="asc" data-col-key="character">Персонаж<span class="sort-arrow">↑</span><span class="col-resize"></span></th>
-      <th class="sticky-l actor-col sortable" data-sort-type="text" data-col-key="actor">Актёр<span class="sort-arrow"></span><span class="col-resize"></span></th>
+      <th class="sticky-l sortable" data-sort-type="text" data-sort-dir="asc" data-col-key="character">Character<span class="sort-arrow">↑</span><span class="col-resize"></span></th>
+      <th class="sticky-l actor-col sortable" data-sort-type="text" data-col-key="actor">Actor<span class="sort-arrow"></span><span class="col-resize"></span></th>
       {% for n in episodes %}<th class="col-num sortable" data-sort-type="num" data-col-key="ep:{{ n }}">E{{ "%02d"|format(n) }}<span class="sort-arrow"></span><span class="col-resize"></span></th>{% endfor %}
       <th class="col-num total sortable" data-sort-type="num" data-col-key="total">Total<span class="sort-arrow"></span><span class="col-resize"></span></th>
       <th class="col-num sortable" data-sort-type="num" data-col-key="episodes">Episodes<span class="sort-arrow"></span><span class="col-resize"></span></th>
@@ -36,7 +95,7 @@
   <tbody>
     {% for row in rows %}
     <tr data-character-id="{{ row.character_id }}"{% if not row.acknowledged %} class="char-new"{% endif %}>
-      <td class="sticky-l char-name-cell" data-sort-value="{{ row.character }}">{% if not row.acknowledged %}<span class="char-new-badge" title="Новый персонаж после импорта">⚠</span>{% endif %}{{ row.character }}{% if not row.acknowledged %} <button type="button" class="char-action-btn char-keep-btn" data-character-id="{{ row.character_id }}" title="Оставить как есть">✓</button><button type="button" class="char-action-btn char-merge-btn" data-character-id="{{ row.character_id }}" title="Слить с существующим">→</button><button type="button" class="char-action-btn char-delete-btn danger" data-character-id="{{ row.character_id }}" data-character-name="{{ row.character }}" title="Удалить персонажа">✕</button><div class="merge-picker" hidden><input type="text" class="merge-picker-input" list="chars-list" placeholder="Слить с…"><button type="button" class="char-action-btn merge-confirm-btn">Объединить</button><button type="button" class="char-action-btn merge-cancel-btn" title="Отмена">✕</button></div>{% endif %}</td>
+      <td class="sticky-l char-name-cell" data-sort-value="{{ row.character }}">{% if not row.acknowledged %}<span class="char-new-badge" title="New character after import">⚠</span>{% endif %}{{ row.character }}{% if not row.acknowledged %} <button type="button" class="char-action-btn char-keep-btn" data-character-id="{{ row.character_id }}" title="Keep as is">✓</button><button type="button" class="char-action-btn char-merge-btn" data-character-id="{{ row.character_id }}" title="Merge into existing">→</button><button type="button" class="char-action-btn char-delete-btn danger" data-character-id="{{ row.character_id }}" data-character-name="{{ row.character }}" title="Delete character">✕</button><div class="merge-picker" hidden><input type="text" class="merge-picker-input" list="chars-list" placeholder="Merge into…"><button type="button" class="char-action-btn merge-confirm-btn">Merge</button><button type="button" class="char-action-btn merge-cancel-btn" title="Cancel">✕</button></div>{% endif %}</td>
       <td class="sticky-l actor-col">
         <input
           class="actor-input"
@@ -104,8 +163,6 @@
 </datalist>
 
 <script src="{{ url_for('static', path='/sort.js') }}"></script>
-<script src="{{ url_for('static', path='/xlsx.full.min.js') }}"></script>
-<script src="{{ url_for('static', path='/import_parser.js') }}"></script>
 <script>
 (function () {
   const table = document.getElementById('pivot');
@@ -119,7 +176,7 @@
   };
 
   const syncMetric = (metric) => {
-    // для input-ячеек обновляем .value, для остальных — textContent
+    // for input cells update .value, for the rest — textContent
     table.querySelectorAll('tbody td.wc-cell').forEach(td => {
       const inp = td.querySelector('.wc-input');
       if (!inp) return;
@@ -277,45 +334,9 @@
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     });
-    // Не стартуем sort при клике на ручку
+    // Don't start sort when clicking the resize handle
     handle.addEventListener('click', (e) => e.stopPropagation());
   });
-
-  const importInput = document.getElementById('import-input');
-  const importLabel = document.getElementById('import-label');
-  if (importInput && importLabel) {
-    importInput.addEventListener('change', async () => {
-      if (!importInput.files || !importInput.files.length) return;
-      const files = Array.from(importInput.files);
-      const originalText = importLabel.innerHTML;
-      importInput.disabled = true;
-      importLabel.textContent = `Обрабатываю 0/${files.length}…`;
-      try {
-        const { episodes, warnings } = await DubStudioImport.parseFiles(files, (done, total, name) => {
-          importLabel.textContent = name ? `${done}/${total}: ${name}` : `${done}/${total}`;
-        });
-        importLabel.textContent = 'Отправляю…';
-        const resp = await fetch('/api/import-json', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project_id: {{ project.id }},
-            episodes,
-            warnings,
-            files_total: files.length,
-          }),
-        });
-        const data = await resp.json();
-        if (!resp.ok || !data.ok) throw new Error(data.reason || `HTTP ${resp.status}`);
-        location.reload();
-      } catch (e) {
-        alert(`Не удалось импортировать: ${e.message || e}`);
-        importInput.disabled = false;
-        importInput.value = '';
-        importLabel.innerHTML = originalText;
-      }
-    });
-  }
 
   table.querySelectorAll('.char-keep-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -367,7 +388,7 @@
     btn.addEventListener('click', async () => {
       const cid = btn.dataset.characterId;
       const name = btn.dataset.characterName;
-      if (!window.confirm(`Удалить персонажа «${name}» со всеми значениями?`)) return;
+      if (!window.confirm(`Delete character "${name}" and all its values?`)) return;
       btn.disabled = true;
       try {
         const r = await fetch(`/api/projects/${projectId}/characters/${cid}/delete`, { method: 'POST' });
@@ -449,7 +470,7 @@
         console.error('Actor save failed', e);
         inp.classList.remove('saving');
         inp.classList.add('error');
-        // Откатываем к последнему сохранённому, чтобы было видно что не ушло
+        // Revert to the last saved value so the user sees the change didn't go through
         inp.value = inp.dataset.initial || '';
       }
     };
@@ -462,6 +483,6 @@
 })();
 </script>
 {% else %}
-<p class="muted">В этом проекте пока нет данных. Импортируйте xlsx-файлы серий.</p>
+<p class="muted">No data in this project yet. Import episode xlsx files.</p>
 {% endif %}
 {% endblock %}

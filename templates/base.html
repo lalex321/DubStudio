@@ -17,12 +17,12 @@
   <a class="brand" href="/">DubStudio</a>
   <nav class="nav">
     {% if user %}
-    <a href="/projects">Проекты</a>
-    {% if is_admin %}<a href="/admin">Админ</a>{% endif %}
+    <a href="/projects">Projects</a>
+    {% if is_admin %}<a href="/admin">Admin</a>{% endif %}
     <span class="user">{{ user }}</span>
-    <form method="post" action="/logout" class="logout-form"><button type="submit" class="muted link-btn">Выйти</button></form>
+    <form method="post" action="/logout" class="logout-form"><button type="submit" class="muted link-btn">Sign out</button></form>
     {% endif %}
-    <button type="button" class="theme-toggle" id="theme-toggle" title="Сменить тему" aria-label="Сменить тему"></button>
+    <button type="button" class="theme-toggle" id="theme-toggle" title="Toggle theme" aria-label="Toggle theme"></button>
   </nav>
 </header>
 <script>

@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="page-head">
-  <h1>Проекты</h1>
+  <h1>Projects</h1>
   {% if is_admin and projects %}
-  <button id="delete-btn" type="button" class="btn btn-danger" disabled>Удалить (0)</button>
+  <button id="delete-btn" type="button" class="btn btn-danger" disabled>Delete (0)</button>
   {% endif %}
-  <a class="btn btn-primary" href="/projects/new">+ Добавить проект</a>
+  <a class="btn btn-primary" href="/projects/new">+ New project</a>
 </section>
 
 {% if projects %}
@@ -17,9 +17,9 @@
     <tr>
       {% if is_admin %}<th class="col-check"></th>{% endif %}
       <th class="col-num sortable" data-sort-type="num" data-sort-dir="asc">#<span class="sort-arrow">↑</span></th>
-      <th class="sortable" data-sort-type="text">Название<span class="sort-arrow"></span></th>
-      <th class="col-num sortable" data-sort-type="num">Эпизодов<span class="sort-arrow"></span></th>
-      <th class="col-date sortable" data-sort-type="text">Дата начала<span class="sort-arrow"></span></th>
+      <th class="sortable" data-sort-type="text">Title<span class="sort-arrow"></span></th>
+      <th class="col-num sortable" data-sort-type="num">Episodes<span class="sort-arrow"></span></th>
+      <th class="col-date sortable" data-sort-type="text">Start date<span class="sort-arrow"></span></th>
     </tr>
   </thead>
   <tbody>
@@ -53,7 +53,7 @@ document.querySelectorAll('#projects-grid .col-click').forEach(td => {
   const checks = document.querySelectorAll('.row-check');
   const update = () => {
     const n = document.querySelectorAll('.row-check:checked').length;
-    btn.textContent = `Удалить (${n})`;
+    btn.textContent = `Delete (${n})`;
     btn.disabled = n === 0;
   };
   checks.forEach(c => c.addEventListener('change', update));
@@ -61,7 +61,7 @@ document.querySelectorAll('#projects-grid .col-click').forEach(td => {
     const picked = Array.from(document.querySelectorAll('.row-check:checked'));
     if (!picked.length) return;
     const titles = picked.map(c => c.closest('tr').dataset.projectTitle);
-    const msg = `Удалить ${picked.length} проект(а): «${titles.join('», «')}»?\n\nСерии, персонажи, ручные правки будут потеряны.`;
+    const msg = `Delete ${picked.length} project(s): "${titles.join('", "')}"?\n\nAll episodes, characters and manual edits will be lost.`;
     if (!window.confirm(msg)) return;
     form.innerHTML = '';
     picked.forEach(c => {
@@ -78,8 +78,8 @@ document.querySelectorAll('#projects-grid .col-click').forEach(td => {
 </script>
 {% else %}
 <section class="empty">
-  <p class="muted">Пока ни одного проекта.</p>
-  <a class="btn btn-primary btn-lg" href="/projects/new">+ Добавить первый проект</a>
+  <p class="muted">No projects yet.</p>
+  <a class="btn btn-primary btn-lg" href="/projects/new">+ Create first project</a>
 </section>
 {% endif %}
 {% endblock %}
