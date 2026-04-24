@@ -516,7 +516,6 @@ a:hover { color: var(--primary-hover); }
 .admin-grid tbody tr:hover { background: transparent; }
 .admin-grid .col-actions { width: 110px; text-align: right; }
 
-.rename-form { display: flex; gap: 6px; align-items: center; }
 .rename-input {
   padding: 3px 8px;
   border: 1px solid transparent;
@@ -530,6 +529,9 @@ a:hover { color: var(--primary-hover); }
 }
 .rename-input:hover { border-color: var(--line-soft); }
 .rename-input:focus { border-color: var(--primary); background: var(--panel); }
+.rename-input.saving { opacity: 0.55; }
+.rename-input.saved { border-color: var(--success); }
+.rename-input.error { border-color: var(--danger); }
 .grid tbody td {
   padding: 3px 8px;
   border-bottom: 1px solid var(--line-soft);

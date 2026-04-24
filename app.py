@@ -945,12 +945,19 @@ async def admin_actor_create(request: Request, name: str = Form(...)):
 async def admin_actor_rename(request: Request, actor_id: int, name: str = Form(...)):
     if (r := _require_admin(request)):
         return r
+    # AJAX callers (admin.html autosave-on-blur) send Accept: application/json
+    # so we can report clashes without a full page re-render.
+    wants_json = "application/json" in request.headers.get("accept", "").lower()
     name = name.strip()
     if not name:
+        if wants_json:
+            return JSONResponse({"ok": False, "error": "name is required"}, status_code=400)
         return RedirectResponse("/admin?tab=actors", status_code=303)
     with Session(engine) as s:
         actor = s.get(Actor, actor_id)
         if not actor:
+            if wants_json:
+                return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
             return RedirectResponse("/admin?tab=actors", status_code=303)
         name_lower = name.lower()
         clash = next(
@@ -961,11 +968,16 @@ async def admin_actor_rename(request: Request, actor_id: int, name: str = Form(.
             None,
         )
         if clash:
-            ctx = _admin_context(s, "actors", error=f"Name \"{name}\" already taken")
+            msg = f'Name "{name}" already taken'
+            if wants_json:
+                return JSONResponse({"ok": False, "error": msg}, status_code=409)
+            ctx = _admin_context(s, "actors", error=msg)
             return _render(request, "admin.html", ctx)
         actor.name = name
         s.add(actor)
         s.commit()
+    if wants_json:
+        return JSONResponse({"ok": True, "name": name})
     return RedirectResponse("/admin?tab=actors", status_code=303)
 
 

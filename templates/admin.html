@@ -24,13 +24,13 @@
   </form>
 
   <div class="grid-wrap">
-  <table class="grid grid-natural admin-grid">
+  <table class="grid grid-natural admin-grid" id="users-grid">
     <thead>
       <tr>
-        <th class="col-num">#</th>
-        <th>Username / email</th>
-        <th>Role</th>
-        <th class="col-date">Created</th>
+        <th class="col-num sortable" data-sort-type="num" data-sort-dir="asc">#<span class="sort-arrow">↑</span></th>
+        <th class="sortable" data-sort-type="text">Username / email<span class="sort-arrow"></span></th>
+        <th class="sortable" data-sort-type="text">Role<span class="sort-arrow"></span></th>
+        <th class="col-date sortable" data-sort-type="text">Created<span class="sort-arrow"></span></th>
         <th class="col-actions"></th>
       </tr>
     </thead>
@@ -60,12 +60,12 @@
   </form>
 
   <div class="grid-wrap">
-  <table class="grid grid-natural admin-grid">
+  <table class="grid grid-natural admin-grid" id="actors-grid">
     <thead>
       <tr>
-        <th class="col-num">#</th>
-        <th>Name</th>
-        <th class="col-num">Assignments</th>
+        <th class="col-num sortable" data-sort-type="num" data-sort-dir="asc">#<span class="sort-arrow">↑</span></th>
+        <th class="sortable" data-sort-type="text">Name<span class="sort-arrow"></span></th>
+        <th class="col-num sortable" data-sort-type="num">Assignments<span class="sort-arrow"></span></th>
         <th class="col-actions"></th>
       </tr>
     </thead>
@@ -74,10 +74,13 @@
       <tr>
         <td class="col-num">{{ a.id }}</td>
         <td>
-          <form method="post" action="/admin/actors/{{ a.id }}/rename" class="inline-form rename-form">
-            <input type="text" name="name" value="{{ a.name }}" class="rename-input">
-            <button type="submit" class="admin-btn ghost">Rename</button>
-          </form>
+          <input
+            type="text"
+            class="rename-input"
+            value="{{ a.name }}"
+            data-actor-id="{{ a.id }}"
+            data-initial="{{ a.name }}"
+          >
         </td>
         <td class="col-num">{{ a.used }}</td>
         <td class="col-actions">
@@ -96,4 +99,60 @@
   </div>
   {% endif %}
 </div>
+
+<script src="{{ url_for('static', path='/sort.js') }}"></script>
+<script>
+(function () {
+  const usersGrid = document.getElementById('users-grid');
+  const actorsGrid = document.getElementById('actors-grid');
+  if (usersGrid) attachSort(usersGrid);
+  if (actorsGrid) attachSort(actorsGrid);
+
+  // Autosave actor rename on blur / Enter. Escape reverts to the last
+  // persisted value. Server returns JSON when Accept: application/json.
+  document.querySelectorAll('.rename-input[data-actor-id]').forEach(inp => {
+    const save = async () => {
+      const next = inp.value.trim();
+      const prev = inp.dataset.initial || '';
+      if (next === prev) { inp.value = prev; return; }
+      if (!next) { inp.value = prev; return; }
+      inp.classList.remove('error', 'saved');
+      inp.classList.add('saving');
+      try {
+        const resp = await fetch(`/admin/actors/${inp.dataset.actorId}/rename`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json',
+          },
+          body: new URLSearchParams({ name: next }),
+        });
+        if (!resp.ok) {
+          let err = `HTTP ${resp.status}`;
+          try { const j = await resp.json(); if (j && j.error) err = j.error; } catch (_) {}
+          throw new Error(err);
+        }
+        inp.dataset.initial = next;
+        inp.classList.remove('saving');
+        inp.classList.add('saved');
+        setTimeout(() => inp.classList.remove('saved'), 600);
+      } catch (e) {
+        inp.classList.remove('saving');
+        inp.classList.add('error');
+        inp.value = prev;
+        inp.title = String(e.message || e);
+      }
+    };
+    inp.addEventListener('blur', save);
+    inp.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') { ev.preventDefault(); inp.blur(); }
+      if (ev.key === 'Escape') {
+        inp.value = inp.dataset.initial || '';
+        inp.classList.remove('error');
+        inp.blur();
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}
