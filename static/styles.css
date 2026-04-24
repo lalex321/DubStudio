@@ -149,9 +149,11 @@ a:hover { color: var(--primary-hover); }
   align-items: center;
   /* Cluster brand + nav on the left so the buttons keep a fixed horizontal
      offset from the logo regardless of viewport width — they no longer
-     drift to the right edge when the window widens. */
+     drift to the right edge when the window widens. The gap is tuned so
+     that the nav starts roughly where the project page-head's "Export
+     Excel" button sits. */
   justify-content: flex-start;
-  gap: 48px;
+  gap: 200px;
   max-width: 1400px;
   margin: 0 auto;
   padding: 8px 20px;
