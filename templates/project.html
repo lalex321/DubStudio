@@ -205,11 +205,70 @@
     });
   };
 
+  // Rebuild Report tab from the live pivot DOM. The server-rendered
+  // version is only correct on initial load; once the user assigns or
+  // unassigns actors via the API, the static Jinja output goes stale,
+  // so we always re-aggregate from the grid before showing this tab.
+  // The bookkeeper report uses Transcription WC by convention, regardless
+  // of which metric the pivot is currently displaying.
+  const escapeHtml = (s) => String(s).replace(
+    /[&<>"']/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
+  );
+
+  const renderReport = () => {
+    if (!reportGrid) return;
+    const tbody = reportGrid.querySelector('tbody');
+    if (!tbody) return;
+
+    const totals = new Map();
+    table.querySelectorAll('tbody tr').forEach(tr => {
+      const actor = (tr.querySelector('.actor-input')?.value || '').trim();
+      if (!actor) return;
+      const totalCell = tr.cells[tr.cells.length - 2];
+      const t = Number(totalCell?.dataset.transcription || 0);
+      totals.set(actor, (totals.get(actor) || 0) + t);
+    });
+
+    const rows = Array.from(totals.entries()).sort(
+      ([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase())
+    );
+
+    let tfoot = reportGrid.querySelector('tfoot');
+
+    if (!rows.length) {
+      tbody.innerHTML =
+        '<tr><td colspan="2" class="muted small" style="text-align:center; padding:14px;">' +
+        'No actor assignments yet. Assign actors on the Transcription WC tab to populate this report.' +
+        '</td></tr>';
+      if (tfoot) tfoot.remove();
+      return;
+    }
+
+    tbody.innerHTML = rows.map(([actor, words]) =>
+      `<tr><td>${escapeHtml(actor)}</td>` +
+      `<td class="col-num col-words">${words || ''}</td></tr>`
+    ).join('');
+
+    if (!tfoot) {
+      tfoot = document.createElement('tfoot');
+      tfoot.innerHTML =
+        '<tr class="foot-total"><td>TOTAL</td>' +
+        '<td class="col-num col-words"></td></tr>';
+      reportGrid.appendChild(tfoot);
+    }
+    const grand = rows.reduce((s, [, w]) => s + w, 0);
+    tfoot.querySelector('.col-words').textContent = grand || '';
+
+    if (reportGrid._resort) reportGrid._resort();
+  };
+
   tabs.forEach(t => t.addEventListener('click', () => {
     tabs.forEach(x => x.classList.remove('active'));
     t.classList.add('active');
     const view = t.dataset.view;
     if (view === 'report') {
+      renderReport();
       if (pivotWrap) pivotWrap.hidden = true;
       if (reportWrap) reportWrap.hidden = false;
       return;
