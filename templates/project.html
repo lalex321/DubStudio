@@ -607,28 +607,45 @@
       const text = (ev.clipboardData || window.clipboardData)?.getData('text') || '';
       if (!text.includes('\n')) return;
       ev.preventDefault();
-      const parts = text.split(/\r?\n/).map(s => s.trim());
-      while (parts.length && parts[parts.length - 1] === '') parts.pop();
+      // Trim blank lines from BOTH ends — Excel often pads a column copy
+      // with empty cells above/below the actual data. Blanks in the
+      // middle are kept positionally and treated as "skip this row" in
+      // the fill loop, so a sparse Excel column doesn't accidentally
+      // clear actors on the rows in between.
+      const rawParts = text.split(/\r?\n/).map(s => s.trim());
+      let lo = 0, hi = rawParts.length;
+      while (lo < hi && rawParts[lo] === '') lo++;
+      while (hi > lo && rawParts[hi - 1] === '') hi--;
+      const parts = rawParts.slice(lo, hi);
       if (!parts.length) return;
       const allInputs = Array.from(table.querySelectorAll('tbody .actor-input'));
       const startIdx = allInputs.indexOf(inp);
       if (startIdx < 0) return;
-      const count = Math.min(parts.length, allInputs.length - startIdx);
+      const span = Math.min(parts.length, allInputs.length - startIdx);
+      // Drop blanks from the count shown to the user — those rows are
+      // skipped, not pasted.
+      const fillCount = parts.slice(0, span).filter(Boolean).length;
+      if (!fillCount) return;
+      const droppedTail = parts.length - span;
       // Warn before creating new Actor records — catches typos in the
       // clipboard before the server auto-creates misspelled duplicates.
-      const willPaste = parts.slice(0, count);
+      const willPaste = parts.slice(0, span).filter(Boolean);
       const seen = new Set();
       const newNames = [];
       for (const n of willPaste) {
-        if (!n) continue;
         const key = n.toLowerCase();
         if (seen.has(key)) continue;
         seen.add(key);
         if (!knownActors.has(key)) newNames.push(n);
       }
-      let msg = parts.length > count
-        ? `Paste ${count} actors starting from this row?\n\nThe clipboard has ${parts.length} names — the last ${parts.length - count} won't fit and will be dropped.`
-        : `Paste ${count} actors starting from this row, in the grid's current order?`;
+      let msg = `Paste ${fillCount} actor${fillCount === 1 ? '' : 's'} starting from this row, in the grid's current order?`;
+      if (droppedTail > 0) {
+        msg += `\n\nThe clipboard has ${parts.length} names — the last ${droppedTail} won't fit and will be dropped.`;
+      }
+      const blanksKept = span - fillCount;
+      if (blanksKept > 0) {
+        msg += `\n\n${blanksKept} blank line${blanksKept === 1 ? '' : 's'} in the clipboard will be skipped (those rows keep their current actor).`;
+      }
       if (newNames.length) {
         const preview = newNames.slice(0, 10).join(', ');
         const more = newNames.length > 10 ? ` (+${newNames.length - 10} more)` : '';
@@ -637,7 +654,8 @@
       if (!window.confirm(msg)) return;
       beginBatch();
       try {
-        for (let i = 0; i < count; i++) {
+        for (let i = 0; i < span; i++) {
+          if (!parts[i]) continue;  // blank in source — leave row untouched
           const target = allInputs[startIdx + i];
           target.value = parts[i];
           await saveActor(target);
