@@ -6,12 +6,244 @@
 
 <div id="calendar" class="calendar-host"></div>
 
+<!-- New / edit session modal -->
+<div id="session-modal" class="modal" hidden>
+  <div class="modal-backdrop" data-modal-close></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="session-modal-title">
+    <h2 id="session-modal-title">New session</h2>
+    <form id="session-form" class="modal-form">
+      <input type="hidden" name="id" value="">
+      <label>
+        <span>Project</span>
+        <select name="project_id" required>
+          <option value="">— pick a project —</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}">{{ p.title }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label>
+        <span>Actor</span>
+        <input type="text" name="actor_name" list="cal-actors-list" required autocomplete="off">
+      </label>
+
+      <label>
+        <span>Room</span>
+        <select name="room_id">
+          <option value="">— no room —</option>
+          {% for r in rooms %}
+          <option value="{{ r.id }}">{{ r.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <div class="modal-row-2">
+        <label>
+          <span>Starts</span>
+          <input type="datetime-local" name="starts_at" required step="900">
+        </label>
+        <label>
+          <span>Ends</span>
+          <input type="datetime-local" name="ends_at" required step="900">
+        </label>
+      </div>
+
+      <div class="modal-row-2">
+        <label>
+          <span>Episodes <span class="muted">(comma-sep, optional)</span></span>
+          <input type="text" name="episode_numbers" placeholder="1,3,5">
+        </label>
+        <label>
+          <span>Target words <span class="muted">(optional)</span></span>
+          <input type="number" name="target_words" min="0" step="1">
+        </label>
+      </div>
+
+      <label>
+        <span>Notes</span>
+        <textarea name="notes" rows="2"></textarea>
+      </label>
+
+      <p class="error" id="session-modal-error" hidden></p>
+
+      <div class="modal-actions">
+        <button type="button" class="btn" data-modal-close>Cancel</button>
+        <button type="submit" class="btn btn-primary" id="session-submit">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<datalist id="cal-actors-list">
+  {% for a in actors %}<option value="{{ a.name }}">{% endfor %}
+</datalist>
+
+<script>
+window.DubStudioCalendar = {
+  projects: {{ projects|tojson }},
+  actors:   {{ actors|tojson }},
+  rooms:    {{ rooms|tojson }}
+};
+</script>
 <script src="{{ url_for('static', path='/fullcalendar.min.js') }}"></script>
 <script>
 (function () {
-  const host = document.getElementById('calendar');
-  if (!host) return;
+  const data = window.DubStudioCalendar;
+  const projectsById = new Map(data.projects.map(p => [p.id, p]));
+  const actorsById = new Map(data.actors.map(a => [a.id, a]));
+  const actorIdByLowerName = new Map(data.actors.map(a => [a.name.trim().toLowerCase(), a.id]));
+  const roomsById = new Map(data.rooms.map(r => [r.id, r]));
 
+  // Deterministic pastel-ish color from a project id when the project
+  // doesn't have an explicit color yet. Same id → same hue across loads.
+  const autoColor = (pid) => {
+    const hue = ((pid || 0) * 137) % 360;
+    return `hsl(${hue}, 55%, 50%)`;
+  };
+  const projectColor = (pid) => {
+    const p = projectsById.get(pid);
+    if (p && p.color) return p.color;
+    return autoColor(pid);
+  };
+
+  const fmt = (n) => String(n).padStart(2, '0');
+  const toLocalInput = (d) => {
+    // <input type="datetime-local"> wants 'YYYY-MM-DDTHH:MM' in local tz
+    return `${d.getFullYear()}-${fmt(d.getMonth()+1)}-${fmt(d.getDate())}T${fmt(d.getHours())}:${fmt(d.getMinutes())}`;
+  };
+
+  const apiToFcEvent = (rs) => {
+    const proj = projectsById.get(rs.project_id);
+    const actor = actorsById.get(rs.actor_id);
+    const room = rs.room_id != null ? roomsById.get(rs.room_id) : null;
+    const color = projectColor(rs.project_id);
+    const title = `${proj ? proj.title : '?'} · ${actor ? actor.name : '?'}` +
+      (room ? ` · ${room.name}` : '');
+    return {
+      id: String(rs.id),
+      title,
+      start: rs.starts_at,
+      end: rs.ends_at,
+      backgroundColor: color,
+      borderColor: color,
+      textColor: '#ffffff',
+      extendedProps: { ...rs },
+    };
+  };
+
+  // ---- modal -------------------------------------------------------
+  const modal = document.getElementById('session-modal');
+  const form = document.getElementById('session-form');
+  const errEl = document.getElementById('session-modal-error');
+  const titleEl = document.getElementById('session-modal-title');
+  const submitBtn = document.getElementById('session-submit');
+
+  const openModal = ({ start, end, session }) => {
+    errEl.hidden = true;
+    errEl.textContent = '';
+    if (session) {
+      titleEl.textContent = 'Edit session';
+      submitBtn.textContent = 'Save';
+      form.elements.id.value = session.id;
+      form.elements.project_id.value = session.project_id;
+      const a = actorsById.get(session.actor_id);
+      form.elements.actor_name.value = a ? a.name : '';
+      form.elements.room_id.value = session.room_id || '';
+      form.elements.starts_at.value = toLocalInput(new Date(session.starts_at));
+      form.elements.ends_at.value = toLocalInput(new Date(session.ends_at));
+      form.elements.episode_numbers.value = session.episode_numbers || '';
+      form.elements.target_words.value = session.target_words ?? '';
+      form.elements.notes.value = session.notes || '';
+    } else {
+      titleEl.textContent = 'New session';
+      submitBtn.textContent = 'Create';
+      form.reset();
+      form.elements.id.value = '';
+      if (start) form.elements.starts_at.value = toLocalInput(start);
+      if (end) form.elements.ends_at.value = toLocalInput(end);
+    }
+    modal.hidden = false;
+    setTimeout(() => form.elements.project_id.focus(), 30);
+  };
+  const closeModal = () => { modal.hidden = true; };
+
+  modal.querySelectorAll('[data-modal-close]').forEach(el =>
+    el.addEventListener('click', closeModal)
+  );
+  document.addEventListener('keydown', (ev) => {
+    if (!modal.hidden && ev.key === 'Escape') closeModal();
+  });
+
+  // ---- form submit -------------------------------------------------
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    errEl.hidden = true;
+
+    const fd = new FormData(form);
+    const id = fd.get('id');
+    const actorName = (fd.get('actor_name') || '').trim();
+    const actorId = actorIdByLowerName.get(actorName.toLowerCase());
+    if (!actorId) {
+      errEl.textContent = `Unknown actor "${actorName}". Add this person on the Admin → Actors tab first.`;
+      errEl.hidden = false;
+      return;
+    }
+    const startsLocal = fd.get('starts_at');
+    const endsLocal = fd.get('ends_at');
+    if (!startsLocal || !endsLocal) {
+      errEl.textContent = 'Pick a start and end time.';
+      errEl.hidden = false;
+      return;
+    }
+    const startsAt = new Date(startsLocal).toISOString();
+    const endsAt = new Date(endsLocal).toISOString();
+    if (new Date(startsLocal) >= new Date(endsLocal)) {
+      errEl.textContent = 'End time must be after start time.';
+      errEl.hidden = false;
+      return;
+    }
+
+    const payload = {
+      project_id: Number(fd.get('project_id')),
+      actor_id: actorId,
+      room_id: fd.get('room_id') || null,
+      starts_at: startsAt,
+      ends_at: endsAt,
+      episode_numbers: (fd.get('episode_numbers') || '').trim(),
+      target_words: fd.get('target_words') || null,
+      notes: (fd.get('notes') || '').trim(),
+    };
+
+    submitBtn.disabled = true;
+    try {
+      const url = id ? `/api/sessions/${id}` : '/api/sessions';
+      const method = id ? 'PATCH' : 'POST';
+      const resp = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        let err = `HTTP ${resp.status}`;
+        try {
+          const j = await resp.json();
+          if (j && j.detail) err = j.detail;
+        } catch (_) {}
+        throw new Error(err);
+      }
+      closeModal();
+      cal.refetchEvents();
+    } catch (e) {
+      errEl.textContent = String(e.message || e);
+      errEl.hidden = false;
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  // ---- calendar ----------------------------------------------------
+  const host = document.getElementById('calendar');
   const cal = new FullCalendar.Calendar(host, {
     initialView: 'timeGridWeek',
     headerToolbar: {
@@ -19,18 +251,41 @@
       center: 'title',
       right: 'dayGridMonth,timeGridWeek,timeGridDay',
     },
-    firstDay: 1,                 // Monday
+    firstDay: 1,
     nowIndicator: true,
-    weekNumbers: false,
     slotMinTime: '08:00:00',
     slotMaxTime: '23:00:00',
     slotDuration: '00:30:00',
     allDaySlot: false,
     height: 'auto',
     expandRows: true,
+    selectable: true,
+    selectMirror: true,
+    editable: false,    // drag/resize comes in step 4
     locale: 'en',
-    // Step 1: no events yet — just an empty calendar to verify the skeleton.
-    events: [],
+    events: async (info, success, failure) => {
+      try {
+        const url = `/api/sessions?from=${encodeURIComponent(info.startStr)}&to=${encodeURIComponent(info.endStr)}`;
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const rows = await resp.json();
+        success(rows.map(apiToFcEvent));
+      } catch (e) {
+        failure(e);
+      }
+    },
+    select: (info) => {
+      openModal({ start: info.start, end: info.end });
+    },
+    dateClick: (info) => {
+      // Single click on an empty slot → 1h default.
+      const start = info.date;
+      const end = new Date(start.getTime() + 60 * 60 * 1000);
+      openModal({ start, end });
+    },
+    eventClick: (info) => {
+      openModal({ session: info.event.extendedProps });
+    },
   });
   cal.render();
 })();

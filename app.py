@@ -194,12 +194,25 @@ async def projects_list(request: Request):
     return _render(request, "projects.html", {"title": "Projects", "projects": rows})
 
 
-# ---------- calendar (Step 1: empty skeleton) ----------
+# ---------- calendar ----------
 @app.get("/calendar", response_class=HTMLResponse)
 async def calendar_page(request: Request):
     if (r := _require_auth(request)):
         return r
-    return _render(request, "calendar.html", {"title": "Calendar"})
+    with Session(engine) as s:
+        projects = list(s.exec(select(Project).order_by(Project.title)).all())
+        actors = list(s.exec(select(Actor).order_by(Actor.name)).all())
+        rooms = list(s.exec(select(Room).order_by(Room.sort_order, Room.name)).all())
+    ctx = {
+        "title": "Calendar",
+        "projects": [
+            {"id": p.id, "title": p.title, "color": p.color or ""}
+            for p in projects
+        ],
+        "actors": [{"id": a.id, "name": a.name} for a in actors],
+        "rooms": [{"id": r.id, "name": r.name} for r in rooms],
+    }
+    return _render(request, "calendar.html", ctx)
 
 
 # ---------- new project (upload) ----------
