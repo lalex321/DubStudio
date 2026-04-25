@@ -639,6 +639,18 @@
         if (!knownActors.has(key)) newNames.push(n);
       }
       let msg = `Paste ${fillCount} actor${fillCount === 1 ? '' : 's'} starting from this row, in the grid's current order?`;
+      // Show what will actually be pasted — protects against
+      // accidentally-copied unrelated text. The user sees the first
+      // few values and bails if it's nonsense.
+      const previewLimit = 5;
+      const previewLines = willPaste
+        .slice(0, previewLimit)
+        .map(n => n.length > 80 ? n.slice(0, 80) + '…' : n)
+        .map((n, i) => `  ${i + 1}. ${n}`)
+        .join('\n');
+      const moreCount = willPaste.length - previewLimit;
+      msg += `\n\nPreview:\n${previewLines}`;
+      if (moreCount > 0) msg += `\n  … and ${moreCount} more`;
       if (droppedTail > 0) {
         msg += `\n\nThe clipboard has ${parts.length} names — the last ${droppedTail} won't fit and will be dropped.`;
       }
