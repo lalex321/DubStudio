@@ -19,6 +19,7 @@ def init_db() -> None:
     SQLModel.metadata.create_all(engine)
     _migrate_sqlite()
     _cleanup_junk_characters()
+    _seed_default_room()
 
 
 def _migrate_sqlite() -> None:
@@ -38,6 +39,11 @@ def _migrate_sqlite() -> None:
         actor_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(actor)"))]
         if "tg" not in actor_cols:
             conn.execute(text("ALTER TABLE actor ADD COLUMN tg TEXT DEFAULT ''"))
+        proj_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(project)"))]
+        if "end_date" not in proj_cols:
+            conn.execute(text("ALTER TABLE project ADD COLUMN end_date DATE"))
+        if "color" not in proj_cols:
+            conn.execute(text("ALTER TABLE project ADD COLUMN color TEXT DEFAULT ''"))
 
 
 # Netflix sheets contain rows for "PRINCIPAL PHOTOGRAPHY", "GRAPHICS INSERTS",
@@ -73,6 +79,22 @@ def _cleanup_junk_characters() -> None:
                     text("DELETE FROM character WHERE id = :cid"),
                     {"cid": cid},
                 )
+
+
+def _seed_default_room() -> None:
+    """Create the first room on a fresh install so the calendar picker
+    isn't empty. Idempotent — does nothing if any room already exists."""
+    from sqlalchemy import text
+
+    with engine.begin() as conn:
+        existing = conn.execute(text("SELECT COUNT(*) FROM room")).scalar() or 0
+        if existing == 0:
+            conn.execute(
+                text(
+                    "INSERT INTO room (name, sort_order, color) "
+                    "VALUES ('Studio A', 0, '')"
+                )
+            )
 
 
 def get_session() -> Session:
