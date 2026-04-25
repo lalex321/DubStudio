@@ -67,7 +67,7 @@
   <thead>
     <tr>
       <th class="sticky-l sortable" data-sort-type="text" data-sort-dir="asc" data-col-key="character">Character<span class="col-count"> ({{ rows|length }})</span><span class="sort-arrow">↑</span><span class="col-resize"></span></th>
-      <th class="sticky-l actor-col sortable" data-sort-type="text" data-col-key="actor">Actor<button type="button" class="col-copy-btn col-actor-copy" title="Copy all actor names to clipboard (one per line)">⎘</button><span class="sort-arrow"></span><span class="col-resize"></span></th>
+      <th class="sticky-l actor-col sortable" data-sort-type="text" data-col-key="actor">Actor<span class="sort-arrow"></span><span class="col-resize"></span></th>
       {% for n in episodes %}<th class="col-num sortable" data-sort-type="num" data-col-key="ep:{{ n }}">E{{ "%02d"|format(n) }}<span class="sort-arrow"></span><span class="col-resize"></span></th>{% endfor %}
       <th class="col-num total sortable" data-sort-type="num" data-col-key="total">Total<span class="sort-arrow"></span><span class="col-resize"></span></th>
       <th class="col-num col-eps sortable" data-sort-type="num" data-col-key="episodes" title="Episodes with non-zero word count">EPs<span class="sort-arrow"></span><span class="col-resize"></span></th>
@@ -677,24 +677,6 @@
       }
     });
   });
-
-  // Column-copy: dump all actor names (current sort order) into the
-  // clipboard, one per line, ready to paste into Excel.
-  const actorCopyBtn = document.querySelector('.col-actor-copy');
-  if (actorCopyBtn) {
-    actorCopyBtn.addEventListener('click', async ev => {
-      ev.stopPropagation();  // don't trigger header sort
-      const inputs = table.querySelectorAll('tbody .actor-input');
-      const values = Array.from(inputs).map(i => (i.value || '').trim()).join('\n');
-      try {
-        await navigator.clipboard.writeText(values);
-        actorCopyBtn.classList.add('copied');
-        setTimeout(() => actorCopyBtn.classList.remove('copied'), 900);
-      } catch (e) {
-        alert('Clipboard write failed: ' + (e.message || e));
-      }
-    });
-  }
 
   // ---- Excel-style rectangular selection on the pivot ------------------
   // Shift+click extends a rectangle from the last-focused/clicked cell.
