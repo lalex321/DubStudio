@@ -66,7 +66,7 @@
 <table class="grid grid-pivot" id="pivot" data-project-id="{{ project.id }}" data-metric="transcription">
   <thead>
     <tr>
-      <th class="sticky-l sortable" data-sort-type="text" data-sort-dir="asc" data-col-key="character">Character<span class="sort-arrow">↑</span><span class="col-resize"></span></th>
+      <th class="sticky-l sortable" data-sort-type="text" data-sort-dir="asc" data-col-key="character">Character<span class="col-count"> ({{ rows|length }})</span><span class="sort-arrow">↑</span><span class="col-resize"></span></th>
       <th class="sticky-l actor-col sortable" data-sort-type="text" data-col-key="actor">Actor<button type="button" class="col-copy-btn col-actor-copy" title="Copy all actor names to clipboard (one per line)">⎘</button><span class="sort-arrow"></span><span class="col-resize"></span></th>
       {% for n in episodes %}<th class="col-num sortable" data-sort-type="num" data-col-key="ep:{{ n }}">E{{ "%02d"|format(n) }}<span class="sort-arrow"></span><span class="col-resize"></span></th>{% endfor %}
       <th class="col-num total sortable" data-sort-type="num" data-col-key="total">Total<span class="sort-arrow"></span><span class="col-resize"></span></th>

@@ -772,6 +772,15 @@ a:hover { color: var(--primary-hover); }
 /* Small icon button in a sortable column header to copy the column to
    the clipboard. Sits between the label and the sort arrow. Stops click
    propagation in JS so it doesn't trigger the sort listener. */
+/* Subtle count next to a column label, e.g. "CHARACTER (47)". Lighter
+   weight + dimmer color so the digit doesn't compete with the header. */
+.col-count {
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .col-copy-btn {
   margin-left: 6px;
   padding: 0 5px;
