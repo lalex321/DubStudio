@@ -24,8 +24,11 @@
       </label>
 
       <label>
-        <span>Actor</span>
-        <input type="text" name="actor_name" list="cal-actors-list" required autocomplete="off">
+        <span>Actors <span class="muted">(Enter / comma to add)</span></span>
+        <div class="chip-input" id="actor-chips">
+          <input type="text" id="actor-chip-input" list="cal-actors-list" autocomplete="off"
+                 placeholder="Type a name…">
+        </div>
       </label>
 
       <label>
@@ -115,10 +118,14 @@ window.DubStudioCalendar = {
 
   const apiToFcEvent = (rs) => {
     const proj = projectsById.get(rs.project_id);
-    const actor = actorsById.get(rs.actor_id);
     const room = rs.room_id != null ? roomsById.get(rs.room_id) : null;
+    const ids = Array.isArray(rs.actor_ids) ? rs.actor_ids : [];
+    const names = ids
+      .map(id => actorsById.get(id))
+      .filter(Boolean)
+      .map(a => a.name);
     const color = projectColor(rs.project_id);
-    const title = `${proj ? proj.title : '?'} · ${actor ? actor.name : '?'}` +
+    const title = `${proj ? proj.title : '?'} · ${names.join(', ') || '—'}` +
       (room ? ` · ${room.name}` : '');
     return {
       id: String(rs.id),
@@ -132,6 +139,64 @@ window.DubStudioCalendar = {
     };
   };
 
+  // ---- chip-style actor picker -------------------------------------
+  const chipsHost = document.getElementById('actor-chips');
+  const chipInput = document.getElementById('actor-chip-input');
+  let pickedActorIds = [];
+
+  const renderChips = () => {
+    // wipe everything except the input
+    chipsHost.querySelectorAll('.chip').forEach(el => el.remove());
+    pickedActorIds.forEach(aid => {
+      const a = actorsById.get(aid);
+      if (!a) return;
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.dataset.actorId = String(aid);
+      chip.innerHTML = `<span class="chip-text"></span><button type="button" class="chip-x" aria-label="Remove">×</button>`;
+      chip.querySelector('.chip-text').textContent = a.name;
+      chip.querySelector('.chip-x').addEventListener('click', () => {
+        pickedActorIds = pickedActorIds.filter(x => x !== aid);
+        renderChips();
+      });
+      chipsHost.insertBefore(chip, chipInput);
+    });
+  };
+
+  const tryAddChipFromInput = () => {
+    const raw = chipInput.value.trim().replace(/,+$/, '').trim();
+    if (!raw) return false;
+    const aid = actorIdByLowerName.get(raw.toLowerCase());
+    if (!aid) {
+      errEl.textContent = `Unknown actor "${raw}". Add this person on the Admin → Actors tab first.`;
+      errEl.hidden = false;
+      return false;
+    }
+    if (pickedActorIds.includes(aid)) {
+      // Already there — just clear input.
+      chipInput.value = '';
+      return true;
+    }
+    pickedActorIds.push(aid);
+    chipInput.value = '';
+    errEl.hidden = true;
+    renderChips();
+    return true;
+  };
+
+  chipInput.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' || ev.key === ',') {
+      ev.preventDefault();
+      tryAddChipFromInput();
+    } else if (ev.key === 'Backspace' && chipInput.value === '' && pickedActorIds.length) {
+      pickedActorIds.pop();
+      renderChips();
+    }
+  });
+  chipInput.addEventListener('blur', () => {
+    if (chipInput.value.trim()) tryAddChipFromInput();
+  });
+
   // ---- modal -------------------------------------------------------
   const modal = document.getElementById('session-modal');
   const form = document.getElementById('session-form');
@@ -142,13 +207,13 @@ window.DubStudioCalendar = {
   const openModal = ({ start, end, session }) => {
     errEl.hidden = true;
     errEl.textContent = '';
+    chipInput.value = '';
     if (session) {
       titleEl.textContent = 'Edit session';
       submitBtn.textContent = 'Save';
       form.elements.id.value = session.id;
       form.elements.project_id.value = session.project_id;
-      const a = actorsById.get(session.actor_id);
-      form.elements.actor_name.value = a ? a.name : '';
+      pickedActorIds = Array.isArray(session.actor_ids) ? [...session.actor_ids] : [];
       form.elements.room_id.value = session.room_id || '';
       form.elements.starts_at.value = toLocalInput(new Date(session.starts_at));
       form.elements.ends_at.value = toLocalInput(new Date(session.ends_at));
@@ -160,9 +225,11 @@ window.DubStudioCalendar = {
       submitBtn.textContent = 'Create';
       form.reset();
       form.elements.id.value = '';
+      pickedActorIds = [];
       if (start) form.elements.starts_at.value = toLocalInput(start);
       if (end) form.elements.ends_at.value = toLocalInput(end);
     }
+    renderChips();
     modal.hidden = false;
     setTimeout(() => form.elements.project_id.focus(), 30);
   };
@@ -180,12 +247,14 @@ window.DubStudioCalendar = {
     ev.preventDefault();
     errEl.hidden = true;
 
+    // Last-ditch chip flush — if the user typed a name and hit Submit
+    // without pressing Enter first, treat it as one more chip.
+    if (chipInput.value.trim()) tryAddChipFromInput();
+
     const fd = new FormData(form);
     const id = fd.get('id');
-    const actorName = (fd.get('actor_name') || '').trim();
-    const actorId = actorIdByLowerName.get(actorName.toLowerCase());
-    if (!actorId) {
-      errEl.textContent = `Unknown actor "${actorName}". Add this person on the Admin → Actors tab first.`;
+    if (!pickedActorIds.length) {
+      errEl.textContent = 'Add at least one actor.';
       errEl.hidden = false;
       return;
     }
@@ -206,7 +275,7 @@ window.DubStudioCalendar = {
 
     const payload = {
       project_id: Number(fd.get('project_id')),
-      actor_id: actorId,
+      actor_ids: [...pickedActorIds],
       room_id: fd.get('room_id') || null,
       starts_at: startsAt,
       ends_at: endsAt,

@@ -450,6 +450,53 @@ a:hover { color: var(--primary-hover); }
 .modal-form select:focus,
 .modal-form textarea:focus { border-color: var(--primary); }
 .modal-form textarea { resize: vertical; min-height: 44px; }
+/* Chip-style multi-actor picker inside the calendar modal. */
+.chip-input {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 6px;
+  min-height: 32px;
+}
+.chip-input:focus-within { border-color: var(--primary); }
+.chip-input input {
+  flex: 1;
+  min-width: 120px;
+  border: 0 !important;
+  padding: 2px 4px !important;
+  background: transparent !important;
+  outline: none;
+  font-size: 13px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.chip-x {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 50%;
+}
+.chip-x:hover { color: var(--danger); }
+
 .modal-row-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;

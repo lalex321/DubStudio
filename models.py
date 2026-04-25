@@ -101,13 +101,16 @@ class RecordingSession(SQLModel, table=True):
     """A scheduled recording slot in the studio. starts_at / ends_at are
     stored UTC; the calendar renders them in the browser's timezone.
 
+    Actors are stored in the SessionActor junction table — a session can
+    have one or more actors (e.g. a dialogue scene with both speakers
+    booked together).
+
     episode_numbers is a comma-separated list (e.g. "3,5,7") for the
     episodes this session covers — kept as a plain string until we
     actually need to query inside it. notes is freeform helper text."""
 
     id: Optional[int] = Field(default=None, primary_key=True)
     project_id: int = Field(foreign_key="project.id", index=True)
-    actor_id: int = Field(foreign_key="actor.id", index=True)
     room_id: Optional[int] = Field(default=None, foreign_key="room.id", index=True)
     starts_at: datetime = Field(index=True)
     ends_at: datetime
@@ -117,3 +120,14 @@ class RecordingSession(SQLModel, table=True):
     notes: str = ""
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
+
+
+class SessionActor(SQLModel, table=True):
+    """Many-to-many between RecordingSession and Actor: one session can
+    book multiple actors (typical for dialogue scenes or group walla)."""
+
+    __table_args__ = (UniqueConstraint("session_id", "actor_id"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    session_id: int = Field(foreign_key="recordingsession.id", index=True)
+    actor_id: int = Field(foreign_key="actor.id", index=True)

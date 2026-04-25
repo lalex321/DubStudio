@@ -32,6 +32,7 @@ from models import (
     RecordingSession,
     Room,
     SESSION_STATUSES,
+    SessionActor,
     User,
     WordCount,
 )
@@ -1085,11 +1086,11 @@ def _parse_iso_dt(s: str) -> Optional[datetime]:
         return None
 
 
-def _session_to_dict(rs: RecordingSession) -> dict:
+def _session_to_dict(rs: RecordingSession, actor_ids: list[int]) -> dict:
     return {
         "id": rs.id,
         "project_id": rs.project_id,
-        "actor_id": rs.actor_id,
+        "actor_ids": list(actor_ids),
         "room_id": rs.room_id,
         "starts_at": rs.starts_at.isoformat(),
         "ends_at": rs.ends_at.isoformat(),
@@ -1098,6 +1099,35 @@ def _session_to_dict(rs: RecordingSession) -> dict:
         "episode_numbers": rs.episode_numbers,
         "notes": rs.notes,
     }
+
+
+def _load_actor_ids(s: Session, session_id: int) -> list[int]:
+    return [
+        sa.actor_id for sa in s.exec(
+            select(SessionActor)
+            .where(SessionActor.session_id == session_id)
+            .order_by(SessionActor.id)
+        ).all()
+    ]
+
+
+def _replace_session_actors(s: Session, session_id: int, actor_ids: list[int]) -> None:
+    """Drop existing actor links for the session and insert the given list
+    in order. Caller is responsible for validating each actor exists."""
+    for sa in s.exec(
+        select(SessionActor).where(SessionActor.session_id == session_id)
+    ).all():
+        s.delete(sa)
+    # Flush so the deletes hit the DB before we insert the (potentially
+    # overlapping) new rows, otherwise the UNIQUE(session_id, actor_id)
+    # constraint trips when re-adding the same actor.
+    s.flush()
+    seen: set[int] = set()
+    for aid in actor_ids:
+        if aid in seen:
+            continue
+        seen.add(aid)
+        s.add(SessionActor(session_id=session_id, actor_id=aid))
 
 
 @app.get("/api/rooms")
@@ -1125,10 +1155,12 @@ async def api_list_sessions(
     """List sessions overlapping [from, to]. FullCalendar passes the
     visible window via its `events` callback as `start` / `end` query
     params; we accept `from` (since `from` is reserved in Python) under
-    the `from_` parameter — clients should send `?from=...&to=...`."""
+    the `from_` parameter — clients should send `?from=...&to=...`.
+
+    actor_id filter joins through SessionActor so a session is included
+    when ANY of its booked actors matches."""
     if not is_authenticated(request):
         raise HTTPException(401)
-    # FastAPI doesn't auto-bind ?from=... to from_; pull it from query.
     if from_ is None:
         from_ = request.query_params.get("from")
     start = _parse_iso_dt(from_) if from_ else None
@@ -1141,21 +1173,55 @@ async def api_list_sessions(
             stmt = stmt.where(RecordingSession.starts_at <= end)
         if project_id is not None:
             stmt = stmt.where(RecordingSession.project_id == project_id)
-        if actor_id is not None:
-            stmt = stmt.where(RecordingSession.actor_id == actor_id)
         if room_id is not None:
             stmt = stmt.where(RecordingSession.room_id == room_id)
+        if actor_id is not None:
+            matching = s.exec(
+                select(SessionActor.session_id).where(SessionActor.actor_id == actor_id)
+            ).all()
+            stmt = stmt.where(RecordingSession.id.in_(list(matching)))
         rows = list(s.exec(stmt.order_by(RecordingSession.starts_at)).all())
-    return JSONResponse([_session_to_dict(rs) for rs in rows])
+        actors_by_session: dict[int, list[int]] = {}
+        if rows:
+            for sa in s.exec(
+                select(SessionActor)
+                .where(SessionActor.session_id.in_([rs.id for rs in rows]))
+                .order_by(SessionActor.id)
+            ).all():
+                actors_by_session.setdefault(sa.session_id, []).append(sa.actor_id)
+    return JSONResponse([
+        _session_to_dict(rs, actors_by_session.get(rs.id, [])) for rs in rows
+    ])
 
 
-def _validate_refs(s: Session, *, project_id: int, actor_id: int, room_id: Optional[int]):
+def _validate_refs(
+    s: Session, *, project_id: int, actor_ids: list[int], room_id: Optional[int]
+):
     if not s.get(Project, project_id):
         raise HTTPException(400, "project not found")
-    if not s.get(Actor, actor_id):
-        raise HTTPException(400, "actor not found")
+    if not actor_ids:
+        raise HTTPException(400, "at least one actor is required")
+    for aid in actor_ids:
+        if not s.get(Actor, aid):
+            raise HTTPException(400, f"actor {aid} not found")
     if room_id is not None and not s.get(Room, room_id):
         raise HTTPException(400, "room not found")
+
+
+def _coerce_actor_ids(raw) -> list[int]:
+    """Accept either a list of ints/strings or None; return list of int.
+    Raises 400 on garbage input."""
+    if raw is None:
+        return []
+    if not isinstance(raw, (list, tuple)):
+        raise HTTPException(400, "actor_ids must be an array")
+    out: list[int] = []
+    for v in raw:
+        try:
+            out.append(int(v))
+        except (TypeError, ValueError):
+            raise HTTPException(400, f"invalid actor id: {v!r}")
+    return out
 
 
 @app.post("/api/sessions")
@@ -1169,9 +1235,9 @@ async def api_create_session(request: Request):
         raise HTTPException(400, "invalid time range")
     try:
         project_id = int(body["project_id"])
-        actor_id = int(body["actor_id"])
     except (KeyError, TypeError, ValueError):
-        raise HTTPException(400, "project_id and actor_id are required")
+        raise HTTPException(400, "project_id is required")
+    actor_ids = _coerce_actor_ids(body.get("actor_ids"))
     room_id_raw = body.get("room_id")
     room_id = int(room_id_raw) if room_id_raw not in (None, "") else None
     status = body.get("status") or "planned"
@@ -1186,10 +1252,9 @@ async def api_create_session(request: Request):
         except (TypeError, ValueError):
             raise HTTPException(400, "target_words must be an integer")
     with Session(engine) as s:
-        _validate_refs(s, project_id=project_id, actor_id=actor_id, room_id=room_id)
+        _validate_refs(s, project_id=project_id, actor_ids=actor_ids, room_id=room_id)
         rs = RecordingSession(
             project_id=project_id,
-            actor_id=actor_id,
             room_id=room_id,
             starts_at=starts,
             ends_at=ends,
@@ -1199,9 +1264,11 @@ async def api_create_session(request: Request):
             notes=str(body.get("notes") or ""),
         )
         s.add(rs)
+        s.flush()
+        _replace_session_actors(s, rs.id, actor_ids)
         s.commit()
         s.refresh(rs)
-        return JSONResponse(_session_to_dict(rs))
+        return JSONResponse(_session_to_dict(rs, _load_actor_ids(s, rs.id)))
 
 
 @app.patch("/api/sessions/{session_id}")
@@ -1227,8 +1294,6 @@ async def api_update_session(request: Request, session_id: int):
             raise HTTPException(400, "starts_at must precede ends_at")
         if "project_id" in body:
             rs.project_id = int(body["project_id"])
-        if "actor_id" in body:
-            rs.actor_id = int(body["actor_id"])
         if "room_id" in body:
             v = body["room_id"]
             rs.room_id = int(v) if v not in (None, "") else None
@@ -1246,17 +1311,22 @@ async def api_update_session(request: Request, session_id: int):
             rs.episode_numbers = str(body["episode_numbers"]).strip()
         if "notes" in body:
             rs.notes = str(body["notes"])
+        actor_ids = _load_actor_ids(s, rs.id)
+        if "actor_ids" in body:
+            actor_ids = _coerce_actor_ids(body["actor_ids"])
         _validate_refs(
             s,
             project_id=rs.project_id,
-            actor_id=rs.actor_id,
+            actor_ids=actor_ids,
             room_id=rs.room_id,
         )
+        if "actor_ids" in body:
+            _replace_session_actors(s, rs.id, actor_ids)
         rs.updated_at = datetime.now(timezone.utc)
         s.add(rs)
         s.commit()
         s.refresh(rs)
-        return JSONResponse(_session_to_dict(rs))
+        return JSONResponse(_session_to_dict(rs, _load_actor_ids(s, rs.id)))
 
 
 @app.delete("/api/sessions/{session_id}")
@@ -1267,6 +1337,10 @@ async def api_delete_session(request: Request, session_id: int):
         rs = s.get(RecordingSession, session_id)
         if not rs:
             raise HTTPException(404, "session not found")
+        for sa in s.exec(
+            select(SessionActor).where(SessionActor.session_id == session_id)
+        ).all():
+            s.delete(sa)
         s.delete(rs)
         s.commit()
     return JSONResponse({"ok": True})

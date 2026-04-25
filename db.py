@@ -18,6 +18,7 @@ engine = create_engine(
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
     _migrate_sqlite()
+    _migrate_session_actors()
     _cleanup_junk_characters()
     _seed_default_room()
 
@@ -78,6 +79,70 @@ def _cleanup_junk_characters() -> None:
                 conn.execute(
                     text("DELETE FROM character WHERE id = :cid"),
                     {"cid": cid},
+                )
+
+
+def _migrate_session_actors() -> None:
+    """RecordingSession.actor_id was a single FK in the first cut of the
+    calendar feature; sessions are now M:N with actors via SessionActor.
+    Detect the legacy column, fan out its values into SessionActor, then
+    rebuild the recordingsession table without the column.
+
+    SQLite doesn't support DROP COLUMN before 3.35 in a way SQLModel can
+    drive, so we do the safe table-rebuild dance:
+      1) read all old rows (including actor_id)
+      2) DROP TABLE recordingsession
+      3) recreate via SQLModel.metadata.create_all on the new schema
+      4) re-insert rows + matching SessionActor entries
+    """
+    if not _DB_URL.startswith("sqlite"):
+        return
+    from sqlalchemy import text
+
+    with engine.begin() as conn:
+        cols = [r[1] for r in conn.execute(text("PRAGMA table_info(recordingsession)"))]
+        if not cols:
+            return  # table doesn't exist yet — fresh install, nothing to migrate
+        if "actor_id" not in cols:
+            return  # already on the new schema
+
+        rows = list(conn.execute(text(
+            "SELECT id, project_id, actor_id, room_id, starts_at, ends_at, "
+            "status, target_words, episode_numbers, notes, created_at, updated_at "
+            "FROM recordingsession"
+        )))
+        conn.execute(text("DROP TABLE recordingsession"))
+
+    # Recreate the table from the current model definitions.
+    SQLModel.metadata.create_all(engine)
+
+    if not rows:
+        return
+    with engine.begin() as conn:
+        for r in rows:
+            conn.execute(
+                text(
+                    "INSERT INTO recordingsession "
+                    "(id, project_id, room_id, starts_at, ends_at, status, "
+                    "target_words, episode_numbers, notes, created_at, updated_at) "
+                    "VALUES (:id, :project_id, :room_id, :starts_at, :ends_at, "
+                    ":status, :target_words, :episode_numbers, :notes, "
+                    ":created_at, :updated_at)"
+                ),
+                {
+                    "id": r[0], "project_id": r[1], "room_id": r[3],
+                    "starts_at": r[4], "ends_at": r[5], "status": r[6],
+                    "target_words": r[7], "episode_numbers": r[8],
+                    "notes": r[9], "created_at": r[10], "updated_at": r[11],
+                },
+            )
+            if r[2] is not None:  # had an actor_id — preserve it
+                conn.execute(
+                    text(
+                        "INSERT INTO sessionactor (session_id, actor_id) "
+                        "VALUES (:sid, :aid)"
+                    ),
+                    {"sid": r[0], "aid": r[2]},
                 )
 
 
