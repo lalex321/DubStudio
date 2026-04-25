@@ -246,6 +246,8 @@ a:hover { color: var(--primary-hover); }
 }
 .admin-top .page-head { margin: 0 0 6px; }
 .admin-top .admin-subtabs { margin: 0; }
+/* Keep the add-form tucked inside the sticky region without inflating it. */
+.admin-top .admin-add-form { margin: 8px 0 4px; }
 
 /* ---------- buttons ---------- */
 .btn {

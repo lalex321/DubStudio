@@ -9,22 +9,29 @@
   <a class="admin-subtab-btn {% if tab == 'actors' %}active{% endif %}" href="/admin?tab=actors">Actors</a>
   <a class="admin-subtab-btn {% if tab == 'users' %}active{% endif %}" href="/admin?tab=users">Users</a>
 </div>
+
+{% if tab == 'users' %}
+<form method="post" action="/admin/users" class="admin-add-form">
+  <input type="text" name="email" placeholder="Username / email" required>
+  <input type="password" name="password" placeholder="Password" required>
+  <select name="role">
+    <option value="assistant_director">assistant_director</option>
+    <option value="admin">admin</option>
+  </select>
+  <button type="submit" class="admin-btn">+ Add</button>
+</form>
+{% else %}
+<form method="post" action="/admin/actors" class="admin-add-form">
+  <input type="text" name="name" placeholder="Actor name" required>
+  <button type="submit" class="admin-btn">+ Add</button>
+</form>
+{% endif %}
 </div>
 
 <div class="admin-pane">
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
   {% if tab == 'users' %}
-  <form method="post" action="/admin/users" class="admin-add-form">
-    <input type="text" name="email" placeholder="Username / email" required>
-    <input type="password" name="password" placeholder="Password" required>
-    <select name="role">
-      <option value="assistant_director">assistant_director</option>
-      <option value="admin">admin</option>
-    </select>
-    <button type="submit" class="admin-btn">+ Add</button>
-  </form>
-
   <div class="grid-wrap">
   <table class="grid grid-natural admin-grid" id="users-grid">
     <thead>
@@ -56,11 +63,6 @@
   </div>
 
   {% else %}
-  <form method="post" action="/admin/actors" class="admin-add-form">
-    <input type="text" name="name" placeholder="Actor name" required>
-    <button type="submit" class="admin-btn">+ Add</button>
-  </form>
-
   <div class="grid-wrap">
   <table class="grid grid-natural admin-grid" id="actors-grid">
     <thead>
