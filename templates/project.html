@@ -706,6 +706,30 @@
     if (ev.key === 'Escape') clearRangeSelection();
   });
 
+  // Delete / Backspace on a range selection clears actor assignments
+  // for the selected rows (no-op for non-actor cells in the rectangle).
+  // Skipped when an input is focused so normal text editing isn't broken.
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Delete' && ev.key !== 'Backspace') return;
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+    const targets = Array.from(table.querySelectorAll('td.range-selected'))
+      .map(td => td.querySelector('.actor-input'))
+      .filter(Boolean)
+      .filter(inp => (inp.value || '').trim() !== '');
+    if (!targets.length) return;
+    ev.preventDefault();
+    const n = targets.length;
+    if (!window.confirm(`Clear actor assignment for ${n} character${n === 1 ? '' : 's'}?`)) return;
+    (async () => {
+      for (const inp of targets) {
+        inp.value = '';
+        await saveActor(inp);
+      }
+      clearRangeSelection();
+    })();
+  });
+
   // Focus leaving the pivot (e.g. click in topbar) abandons the range —
   // prevents our copy handler from hijacking Cmd+C on unrelated UI.
   document.addEventListener('focusin', (ev) => {
