@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <h1>Calendar</h1>
+</section>
+
+<div id="calendar" class="calendar-host"></div>
+
+<script src="{{ url_for('static', path='/fullcalendar.min.js') }}"></script>
+<script>
+(function () {
+  const host = document.getElementById('calendar');
+  if (!host) return;
+
+  const cal = new FullCalendar.Calendar(host, {
+    initialView: 'timeGridWeek',
+    headerToolbar: {
+      left: 'prev,next today',
+      center: 'title',
+      right: 'dayGridMonth,timeGridWeek,timeGridDay',
+    },
+    firstDay: 1,                 // Monday
+    nowIndicator: true,
+    weekNumbers: false,
+    slotMinTime: '08:00:00',
+    slotMaxTime: '23:00:00',
+    slotDuration: '00:30:00',
+    allDaySlot: false,
+    height: 'auto',
+    expandRows: true,
+    locale: 'en',
+    // Step 1: no events yet — just an empty calendar to verify the skeleton.
+    events: [],
+  });
+  cal.render();
+})();
+</script>
+{% endblock %}

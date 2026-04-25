@@ -19,6 +19,7 @@
     <nav class="nav">
       {% if user %}
       <a href="/projects">Projects</a>
+      <a href="/calendar">Calendar</a>
       {% if is_admin %}<a href="/admin">Admin</a>{% endif %}
       <span class="user">{{ user }}</span>
       <form method="post" action="/logout" class="logout-form"><button type="submit" class="muted link-btn">Sign out</button></form>

@@ -382,6 +382,69 @@ a:hover { color: var(--primary-hover); }
   color: var(--text);
 }
 
+/* ---------- calendar (FullCalendar host) ---------- */
+.calendar-host {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px 14px;
+  box-shadow: var(--shadow);
+  /* FullCalendar reads these for theming. We map our palette onto the
+     subset that meaningfully changes its appearance. */
+  --fc-border-color: var(--line-soft);
+  --fc-page-bg-color: var(--panel);
+  --fc-neutral-bg-color: var(--soft);
+  --fc-neutral-text-color: var(--text);
+  --fc-today-bg-color: color-mix(in srgb, var(--primary) 8%, var(--panel));
+  --fc-now-indicator-color: var(--danger);
+  --fc-button-bg-color: var(--panel);
+  --fc-button-border-color: var(--line);
+  --fc-button-text-color: var(--text);
+  --fc-button-hover-bg-color: var(--soft);
+  --fc-button-hover-border-color: var(--primary);
+  --fc-button-active-bg-color: var(--primary);
+  --fc-button-active-border-color: var(--primary);
+  --fc-event-bg-color: var(--primary);
+  --fc-event-border-color: var(--primary);
+  --fc-event-text-color: var(--primary-fg);
+  --fc-list-event-hover-bg-color: var(--hover);
+}
+.calendar-host .fc-toolbar-title {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.calendar-host .fc-button {
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: capitalize;
+  border-radius: 6px;
+  box-shadow: none;
+  padding: 4px 10px;
+}
+.calendar-host .fc-button:focus,
+.calendar-host .fc-button-primary:not(:disabled).fc-button-active {
+  box-shadow: none;
+  color: var(--primary-fg);
+}
+.calendar-host .fc-col-header-cell-cushion,
+.calendar-host .fc-list-day-cushion {
+  color: var(--text);
+  font-weight: 700;
+  font-size: 12px;
+}
+.calendar-host .fc-timegrid-slot-label-cushion,
+.calendar-host .fc-timegrid-axis-cushion {
+  color: var(--muted-2);
+  font-size: 11px;
+}
+.calendar-host .fc-event {
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .warnings {
   background: var(--panel);
   border: 1px solid var(--line);

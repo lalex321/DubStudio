@@ -191,6 +191,14 @@ async def projects_list(request: Request):
     return _render(request, "projects.html", {"title": "Projects", "projects": rows})
 
 
+# ---------- calendar (Step 1: empty skeleton) ----------
+@app.get("/calendar", response_class=HTMLResponse)
+async def calendar_page(request: Request):
+    if (r := _require_auth(request)):
+        return r
+    return _render(request, "calendar.html", {"title": "Calendar"})
+
+
 # ---------- new project (upload) ----------
 @app.post("/projects/delete")
 async def projects_delete(request: Request):
