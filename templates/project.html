@@ -520,11 +520,44 @@
     Array.from(datalist.options).map(o => o.value.toLowerCase())
   );
 
+  // ---- Undo / redo for actor edits ------------------------------------
+  // Stack of batches; each batch is a list of {kind:'actor', characterId,
+  // before, after}. A single edit produces a one-action batch; paste
+  // fill-down and range-delete bundle their N saves into one batch via
+  // beginBatch/endBatch so Cmd+Z reverts the whole gesture at once.
+  const editHistory = [];
+  const redoHistory = [];
+  let currentBatch = null;
+  let suppressHistory = false;
+  const HISTORY_CAP = 200;
+
+  const beginBatch = () => { currentBatch = []; };
+  const endBatch = () => {
+    if (currentBatch && currentBatch.length) {
+      editHistory.push(currentBatch);
+      while (editHistory.length > HISTORY_CAP) editHistory.shift();
+      redoHistory.length = 0;
+    }
+    currentBatch = null;
+  };
+
+  const recordAction = (action) => {
+    if (suppressHistory) return;
+    if (currentBatch) {
+      currentBatch.push(action);
+      return;
+    }
+    editHistory.push([action]);
+    while (editHistory.length > HISTORY_CAP) editHistory.shift();
+    redoHistory.length = 0;
+  };
+
   // Extracted so the column-paste handler below can await a sequential
   // fill-down instead of firing N parallel POSTs through dispatched blur.
   const saveActor = async (inp) => {
+    const before = inp.dataset.initial || '';
     const newVal = inp.value.trim();
-    if (newVal === (inp.dataset.initial || '')) return;
+    if (newVal === before) return;
     const row = inp.closest('tr');
     const cid = row.dataset.characterId;
     inp.classList.remove('error', 'saved');
@@ -548,6 +581,7 @@
         datalist.appendChild(opt);
         knownActors.add(data.actor_name.toLowerCase());
       }
+      recordAction({ kind: 'actor', characterId: cid, before, after: inp.value });
       inp.classList.remove('saving');
       inp.classList.add('saved');
       setTimeout(() => inp.classList.remove('saved'), 600);
@@ -601,10 +635,15 @@
         msg += `\n\nThis will CREATE ${newNames.length} new actor${newNames.length === 1 ? '' : 's'}: ${preview}${more}`;
       }
       if (!window.confirm(msg)) return;
-      for (let i = 0; i < count; i++) {
-        const target = allInputs[startIdx + i];
-        target.value = parts[i];
-        await saveActor(target);
+      beginBatch();
+      try {
+        for (let i = 0; i < count; i++) {
+          const target = allInputs[startIdx + i];
+          target.value = parts[i];
+          await saveActor(target);
+        }
+      } finally {
+        endBatch();
       }
     });
   });
@@ -722,12 +761,60 @@
     const n = targets.length;
     if (!window.confirm(`Clear actor assignment for ${n} character${n === 1 ? '' : 's'}?`)) return;
     (async () => {
-      for (const inp of targets) {
-        inp.value = '';
-        await saveActor(inp);
+      beginBatch();
+      try {
+        for (const inp of targets) {
+          inp.value = '';
+          await saveActor(inp);
+        }
+      } finally {
+        endBatch();
       }
       clearRangeSelection();
     })();
+  });
+
+  // Cmd/Ctrl+Z to undo the last actor edit batch, Cmd/Ctrl+Shift+Z (or
+  // Cmd+Y) to redo. History lives in this page's JS only — survives
+  // until you reload. Skipped while an input is focused so the browser
+  // can keep its native text-undo for the field being typed in.
+  const replayBatch = async (batch, useAfter) => {
+    suppressHistory = true;
+    try {
+      for (const action of batch) {
+        if (action.kind !== 'actor') continue;
+        const inp = table.querySelector(
+          `tr[data-character-id="${action.characterId}"] .actor-input`
+        );
+        if (!inp) continue;
+        inp.value = useAfter ? action.after : action.before;
+        await saveActor(inp);
+      }
+    } finally {
+      suppressHistory = false;
+    }
+  };
+
+  document.addEventListener('keydown', async (ev) => {
+    const mod = ev.metaKey || ev.ctrlKey;
+    if (!mod) return;
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+    const isUndo = ev.key === 'z' && !ev.shiftKey;
+    const isRedo = (ev.key === 'z' && ev.shiftKey) || ev.key === 'y';
+    if (!isUndo && !isRedo) return;
+    ev.preventDefault();
+    if (isUndo) {
+      const batch = editHistory.pop();
+      if (!batch) return;
+      await replayBatch(batch, /* useAfter */ false);
+      redoHistory.push(batch);
+    } else {
+      const batch = redoHistory.pop();
+      if (!batch) return;
+      await replayBatch(batch, /* useAfter */ true);
+      editHistory.push(batch);
+    }
   });
 
   // Focus leaving the pivot (e.g. click in topbar) abandons the range —
