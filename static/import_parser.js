@@ -87,9 +87,14 @@
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: "array", cellDates: false });
     const stem = file.name.replace(/\.xlsx$/i, "");
-    const episodeNum = detectEpisode(stem);
+    let episodeNum = detectEpisode(stem);
+    let singleFilm = false;
     if (episodeNum == null) {
-      return { filename: file.name, error: `не нашёл номер эпизода` };
+      // Whole project is a single film — no episode number in the name.
+      // Treat it as episode 1 so the rest of the pipeline (grid, report,
+      // re-import) works unchanged.
+      episodeNum = 1;
+      singleFilm = true;
     }
     try {
       const rows = readWordCountRows(wb);
@@ -99,6 +104,7 @@
         episode_num: episodeNum,
         show_title: showTitle,
         rows: rows,
+        single_film: singleFilm,
       };
     } catch (e) {
       return { filename: file.name, error: String(e.message || e) };
@@ -127,6 +133,11 @@
       if (parsed.error) {
         warnings.push(`${parsed.filename}: ${parsed.error}`);
         continue;
+      }
+      if (parsed.single_film) {
+        warnings.push(
+          `${parsed.filename}: номер эпизода не найден — загружаю как фильм (серия 1)`
+        );
       }
       if (seenEpisodes.has(parsed.episode_num)) {
         warnings.push(
