@@ -1104,3 +1104,30 @@ a:hover { color: var(--primary-hover); }
   pointer-events: none;
 }
 .actor-tooltip > div { font-weight: 600; }
+
+/* Custom autocomplete dropdown for the Actor cell. Replaces the native
+   <datalist> so suggestions also work after a comma (массовка input). */
+.actor-ac {
+  position: absolute;
+  z-index: 1100;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  padding: 3px 0;
+  box-shadow: 0 6px 18px rgba(8, 20, 45, 0.18);
+  font-size: 12px;
+  max-height: 220px;
+  overflow-y: auto;
+  min-width: 140px;
+}
+.actor-ac-item {
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.actor-ac-item.active,
+.actor-ac-item:hover {
+  background: var(--accent-soft, rgba(8, 20, 45, 0.08));
+}

@@ -82,7 +82,7 @@
           class="actor-input"
           type="text"
           size="1"
-          list="actors-list"
+          autocomplete="off"
           value="{{ row.actor_name }}"
           data-initial="{{ row.actor_name }}"
           placeholder="—"
@@ -633,12 +633,139 @@
   };
   const hideActorTip = () => { actorTip.hidden = true; };
 
+  // ---- Custom autocomplete (handles tokens after a comma) ---------------
+  // Native <datalist> matches against the whole input value, so once you
+  // type "Иванов, Пет" it stops being helpful. This dropdown parses the
+  // last token (after the last comma), filters knownActors by prefix, and
+  // lets you pick with mouse / Enter / Tab.
+  const acDropdown = (() => {
+    let el = document.getElementById('actor-ac');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'actor-ac';
+      el.className = 'actor-ac';
+      el.hidden = true;
+      document.body.appendChild(el);
+    }
+    return el;
+  })();
+  let acState = { input: null, matches: [], active: 0 };
+
+  const acTokenInfo = (inp) => {
+    const v = inp.value || '';
+    const lastComma = v.lastIndexOf(',');
+    const before = lastComma < 0 ? '' : v.slice(0, lastComma + 1);
+    const tail = lastComma < 0 ? v : v.slice(lastComma + 1);
+    const leading = tail.length - tail.trimStart().length;
+    const token = tail.trim();
+    return { before, leadingSpaces: ' '.repeat(leading), token };
+  };
+
+  const acAlreadyPicked = (inp) => {
+    const v = inp.value || '';
+    const lastComma = v.lastIndexOf(',');
+    const head = lastComma < 0 ? '' : v.slice(0, lastComma);
+    return new Set(
+      head.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+    );
+  };
+
+  const acRender = () => {
+    acDropdown.innerHTML = '';
+    acState.matches.forEach((name, i) => {
+      const row = document.createElement('div');
+      row.className = 'actor-ac-item' + (i === acState.active ? ' active' : '');
+      row.textContent = name;
+      // mousedown (not click) so we beat the input's blur — otherwise the
+      // input loses focus before we get to apply the pick.
+      row.addEventListener('mousedown', (ev) => {
+        ev.preventDefault();
+        acPick(name);
+      });
+      acDropdown.appendChild(row);
+    });
+  };
+
+  const acHide = () => {
+    acDropdown.hidden = true;
+    acState = { input: null, matches: [], active: 0 };
+  };
+
+  const acShow = (inp) => {
+    const { token } = acTokenInfo(inp);
+    if (!token) { acHide(); return; }
+    const picked = acAlreadyPicked(inp);
+    const tl = token.toLowerCase();
+    const matches = [];
+    // Datalist holds the full known-actors list — iterate its <option>s
+    // so newly auto-created actors register without bookkeeping.
+    for (const opt of datalist.querySelectorAll('option')) {
+      const nm = opt.value;
+      const k = nm.toLowerCase();
+      if (k === tl) continue;            // exact match — nothing to suggest
+      if (picked.has(k)) continue;       // already in this cell
+      if (!k.startsWith(tl)) continue;   // prefix match
+      matches.push(nm);
+      if (matches.length >= 8) break;
+    }
+    if (!matches.length) { acHide(); return; }
+    acState = { input: inp, matches, active: 0 };
+    acRender();
+    const r = inp.getBoundingClientRect();
+    acDropdown.style.left = (window.scrollX + r.left) + 'px';
+    acDropdown.style.top = (window.scrollY + r.bottom + 2) + 'px';
+    acDropdown.style.minWidth = r.width + 'px';
+    acDropdown.hidden = false;
+  };
+
+  const acPick = (name) => {
+    const inp = acState.input;
+    if (!inp) return;
+    const { before } = acTokenInfo(inp);
+    // Insert the picked name without a trailing separator — typing a
+    // comma is the user's explicit "I want another one" signal, and
+    // most cells hold just one actor.
+    inp.value = before + (before ? ' ' : '') + name;
+    acHide();
+    inp.focus();
+    // Caret to the end so the user types the next name immediately.
+    const end = inp.value.length;
+    try { inp.setSelectionRange(end, end); } catch {}
+  };
+
   table.querySelectorAll('.actor-input').forEach(inp => {
     inp.addEventListener('mouseenter', () => showActorTip(inp));
     inp.addEventListener('mouseleave', hideActorTip);
     inp.addEventListener('focus', hideActorTip);
-    inp.addEventListener('blur', () => saveActor(inp));
+    inp.addEventListener('input', () => acShow(inp));
+    inp.addEventListener('blur', () => { acHide(); saveActor(inp); });
     inp.addEventListener('keydown', ev => {
+      // Dropdown-aware key handling: arrows / Enter / Tab pick, Escape
+      // closes the dropdown without resetting the cell.
+      if (!acDropdown.hidden && acState.input === inp) {
+        if (ev.key === 'ArrowDown') {
+          ev.preventDefault();
+          acState.active = (acState.active + 1) % acState.matches.length;
+          acRender();
+          return;
+        }
+        if (ev.key === 'ArrowUp') {
+          ev.preventDefault();
+          acState.active = (acState.active - 1 + acState.matches.length) % acState.matches.length;
+          acRender();
+          return;
+        }
+        if (ev.key === 'Enter' || ev.key === 'Tab') {
+          ev.preventDefault();
+          acPick(acState.matches[acState.active]);
+          return;
+        }
+        if (ev.key === 'Escape') {
+          ev.preventDefault();
+          acHide();
+          return;
+        }
+      }
       if (ev.key === 'Enter') { ev.preventDefault(); inp.blur(); }
       if (ev.key === 'Escape') { inp.value = inp.dataset.initial || ''; inp.blur(); }
     });
