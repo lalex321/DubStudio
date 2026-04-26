@@ -504,9 +504,10 @@ async def project_detail(request: Request, project_id: int):
             .join(Actor, Actor.id == Assignment.actor_id)
             .where(Assignment.project_id == project_id)
         ).all()
-        actor_by_char: dict[int, tuple[int, str]] = {
-            a.character_id: (a.actor_id, actor_name) for a, actor_name in assignment_rows
-        }
+        # character_id → list of (actor_id, actor_name) in input order.
+        actors_by_char: dict[int, list[tuple[int, str]]] = {}
+        for a, actor_name in assignment_rows:
+            actors_by_char.setdefault(a.character_id, []).append((a.actor_id, actor_name))
 
         actors_all = list(s.exec(select(Actor).order_by(Actor.name)).all())
 
@@ -528,7 +529,7 @@ async def project_detail(request: Request, project_id: int):
     ep_totals: dict[int, dict[str, int]] = {n: {"dialog": 0, "transcription": 0} for n in ep_numbers}
     grand = {"dialog": 0, "transcription": 0}
     for c in sorted(characters, key=lambda x: x.name.upper()):
-        actor = actor_by_char.get(c.id)
+        actors_for_char = actors_by_char.get(c.id, [])
         per_ep = []
         totals = {"dialog": 0, "transcription": 0}
         episodes_count = {"dialog": 0, "transcription": 0}
@@ -545,13 +546,18 @@ async def project_detail(request: Request, project_id: int):
                 episodes_count["transcription"] += 1
         grand["dialog"] += totals["dialog"]
         grand["transcription"] += totals["transcription"]
+        actor_ids = [aid for aid, _ in actors_for_char]
+        actor_names = [n for _, n in actors_for_char]
         rows.append(
             {
                 "character_id": c.id,
                 "character": c.name,
                 "acknowledged": c.acknowledged,
-                "actor_id": actor[0] if actor else None,
-                "actor_name": actor[1] if actor else "",
+                # Joined display: comma-separated. Empty string when no actors.
+                "actor_name": ", ".join(actor_names),
+                # Structured fields for the JS layer (tooltip, edit roundtrip).
+                "actor_ids": actor_ids,
+                "actor_names": actor_names,
                 "per_ep": per_ep,
                 "totals": totals,
                 "episodes_count": episodes_count,
@@ -568,10 +574,12 @@ async def project_detail(request: Request, project_id: int):
     # page doesn't hit the database again.
     actor_totals: dict[str, int] = {}
     for r in rows:
-        name = r["actor_name"]
-        if not name:
+        names = r.get("actor_names") or []
+        # Skip массовка (multi-actor characters) — payout rule pending.
+        # Single-actor rows attribute their full transcription to that actor.
+        if len(names) != 1:
             continue
-        actor_totals[name] = actor_totals.get(name, 0) + r["totals"]["transcription"]
+        actor_totals[names[0]] = actor_totals.get(names[0], 0) + r["totals"]["transcription"]
     report_rows = [
         {"actor": name, "words": words}
         for name, words in sorted(actor_totals.items(), key=lambda x: x[0].lower())
@@ -626,7 +634,12 @@ async def project_export(request: Request, project_id: int):
         ).all()
 
     char_names = sorted((c.name for c in characters), key=str.upper)
-    actor_by_char = {char_name: actor_name for _, actor_name, char_name in actor_rows}
+    # Multiple actors per character collapse to a comma-joined string for
+    # the xlsx export (one row per character, like the original Netflix sheet).
+    _by_char: dict[str, list[str]] = {}
+    for _, actor_name, char_name in actor_rows:
+        _by_char.setdefault(char_name, []).append(actor_name)
+    actor_by_char = {k: ", ".join(v) for k, v in _by_char.items()}
     char_name_by_id = {c.id: c.name for c in characters}
 
     transcription: dict[str, dict[int, int]] = {}
@@ -677,11 +690,20 @@ async def project_report(request: Request, project_id: int):
                 select(WordCount).where(WordCount.episode_id.in_(episode_ids))
             ).all():
                 wc_by_char[wc.character_id] = wc_by_char.get(wc.character_id, 0) + wc.transcription_wc
-        actor_total: dict[int, int] = {}
+        # Multi-actor characters (массовка) are skipped — payout rule TBD.
+        # Single-actor characters attribute their full transcription to
+        # that actor.
+        actors_per_char: dict[int, list[int]] = {}
         for a in s.exec(
             select(Assignment).where(Assignment.project_id == project_id)
         ).all():
-            actor_total[a.actor_id] = actor_total.get(a.actor_id, 0) + wc_by_char.get(a.character_id, 0)
+            actors_per_char.setdefault(a.character_id, []).append(a.actor_id)
+        actor_total: dict[int, int] = {}
+        for cid, aids in actors_per_char.items():
+            if len(aids) != 1:
+                continue
+            words = wc_by_char.get(cid, 0)
+            actor_total[aids[0]] = actor_total.get(aids[0], 0) + words
         if not actor_total:
             rows = []
         else:
@@ -708,45 +730,80 @@ async def project_report(request: Request, project_id: int):
 
 
 # ---------- actor assignment API ----------
+def _parse_actor_names(raw: str) -> list[str]:
+    """Split a comma-separated cell value into trimmed, deduped names.
+    Case-insensitive dedup but preserves the first-seen casing."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for piece in (raw or "").split(","):
+        n = piece.strip()
+        if not n:
+            continue
+        key = n.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(n)
+    return out
+
+
 @app.post("/api/projects/{project_id}/characters/{character_id}/actor")
 async def set_actor(request: Request, project_id: int, character_id: int):
     if not is_authenticated(request):
         raise HTTPException(401)
     body = await request.json()
-    name = (body.get("name") or "").strip()
+    # Accept either {"name": "A, B"} (legacy single field, now also used
+    # for multi) or {"names": [...]} for explicit list.
+    if isinstance(body.get("names"), list):
+        wanted = [str(x).strip() for x in body["names"] if str(x).strip()]
+        # dedup with same rules as the parser
+        wanted = _parse_actor_names(",".join(wanted))
+    else:
+        wanted = _parse_actor_names(body.get("name") or "")
 
     with Session(engine) as s:
         char = s.get(Character, character_id)
         if not char or char.project_id != project_id:
             raise HTTPException(404, "Character not found")
 
-        existing = s.exec(
+        existing = list(s.exec(
             select(Assignment).where(
                 Assignment.project_id == project_id,
                 Assignment.character_id == character_id,
             )
-        ).first()
+        ).all())
 
-        if not name:
-            if existing:
-                s.delete(existing)
-                s.commit()
-            return JSONResponse({"actor_id": None, "actor_name": ""})
+        # Empty list — drop all assignments for this character.
+        if not wanted:
+            for a in existing:
+                s.delete(a)
+            s.commit()
+            return JSONResponse({"actor_ids": [], "actor_names": [], "actor_name": ""})
 
-        name_lower = name.lower()
-        actor = next(
-            (a for a in s.exec(select(Actor)).all() if a.name.lower() == name_lower),
-            None,
-        )
-        if not actor:
-            actor = Actor(name=name)
-            s.add(actor)
-            s.flush()
+        # Resolve names to actor rows, auto-creating missing ones.
+        all_actors = list(s.exec(select(Actor)).all())
+        by_lower = {a.name.lower(): a for a in all_actors}
+        resolved: list[Actor] = []
+        for n in wanted:
+            actor = by_lower.get(n.lower())
+            if not actor:
+                actor = Actor(name=n)
+                s.add(actor)
+                s.flush()
+                by_lower[n.lower()] = actor
+            resolved.append(actor)
 
-        if existing:
-            existing.actor_id = actor.id
-            s.add(existing)
-        else:
+        # Replace assignments: drop all old, flush so the UNIQUE
+        # (character_id, actor_id) constraint isn't tripped if the same
+        # actor is being re-added, then re-insert.
+        for a in existing:
+            s.delete(a)
+        s.flush()
+        seen_ids: set[int] = set()
+        for actor in resolved:
+            if actor.id in seen_ids:
+                continue
+            seen_ids.add(actor.id)
             s.add(
                 Assignment(
                     project_id=project_id,
@@ -755,7 +812,15 @@ async def set_actor(request: Request, project_id: int, character_id: int):
                 )
             )
         s.commit()
-        return JSONResponse({"actor_id": actor.id, "actor_name": actor.name})
+
+        ids = [a.id for a in resolved]
+        names = [a.name for a in resolved]
+        return JSONResponse({
+            "actor_ids": ids,
+            "actor_names": names,
+            # Backwards-compat field for any caller still reading actor_name.
+            "actor_name": ", ".join(names),
+        })
 
 
 @app.post("/api/projects/{project_id}/characters/{character_id}/acknowledge")
@@ -812,22 +877,28 @@ async def merge_character(request: Request, project_id: int, character_id: int):
                 swc.character_id = target.id
                 s.add(swc)
 
-        src_assign = s.exec(
+        src_assigns = list(s.exec(
             select(Assignment).where(
                 Assignment.project_id == project_id, Assignment.character_id == source.id
             )
-        ).first()
-        tgt_assign = s.exec(
-            select(Assignment).where(
-                Assignment.project_id == project_id, Assignment.character_id == target.id
-            )
-        ).first()
-        if src_assign:
-            if not tgt_assign:
-                src_assign.character_id = target.id
-                s.add(src_assign)
+        ).all())
+        tgt_actor_ids = {
+            a.actor_id for a in s.exec(
+                select(Assignment).where(
+                    Assignment.project_id == project_id,
+                    Assignment.character_id == target.id,
+                )
+            ).all()
+        }
+        # Move source assignments onto target unless that actor is already
+        # cast on target (UNIQUE(character_id, actor_id) would fail).
+        for sa in src_assigns:
+            if sa.actor_id in tgt_actor_ids:
+                s.delete(sa)
             else:
-                s.delete(src_assign)
+                sa.character_id = target.id
+                tgt_actor_ids.add(sa.actor_id)
+                s.add(sa)
 
         target.acknowledged = True
         s.add(target)

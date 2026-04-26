@@ -1086,3 +1086,21 @@ a:hover { color: var(--primary-hover); }
 .actor-input.saving { opacity: 0.55; }
 .actor-input.saved { border-color: var(--success); }
 .actor-input.error { border-color: var(--danger); }
+
+/* Hover tooltip for cells holding multiple comma-separated actors
+   (массовка). Names are stacked one per line. */
+.actor-tooltip {
+  position: absolute;
+  z-index: 1000;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  padding: 6px 9px;
+  box-shadow: 0 4px 14px rgba(8, 20, 45, 0.18);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.actor-tooltip > div { font-weight: 600; }

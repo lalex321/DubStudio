@@ -19,6 +19,7 @@ def init_db() -> None:
     SQLModel.metadata.create_all(engine)
     _migrate_sqlite()
     _migrate_session_actors()
+    _migrate_assignment_multi_actor()
     _cleanup_junk_characters()
     _seed_default_room()
 
@@ -144,6 +145,55 @@ def _migrate_session_actors() -> None:
                     ),
                     {"sid": r[0], "aid": r[2]},
                 )
+
+
+def _migrate_assignment_multi_actor() -> None:
+    """Originally Assignment had UNIQUE(project_id, character_id) — one
+    actor per character. Массовка scenes need multiple actors per
+    character, so the constraint is now UNIQUE(character_id, actor_id).
+    Detect the old shape by inspecting the table's CREATE SQL and rebuild
+    if needed. Existing rows transfer 1:1.
+    """
+    if not _DB_URL.startswith("sqlite"):
+        return
+    from sqlalchemy import text
+
+    with engine.begin() as conn:
+        row = conn.execute(text(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='assignment'"
+        )).first()
+        if not row:
+            return
+        ddl = (row[0] or "").lower().replace(" ", "")
+        # Legacy constraint was UNIQUE(project_id, character_id). If the
+        # CREATE SQL no longer mentions that pair, we're already on the
+        # new shape — nothing to do.
+        if "project_id,character_id" not in ddl:
+            return
+
+        rows = list(conn.execute(text(
+            "SELECT id, project_id, character_id, actor_id FROM assignment"
+        )))
+        conn.execute(text("DROP TABLE assignment"))
+
+    SQLModel.metadata.create_all(engine)
+
+    if not rows:
+        return
+    with engine.begin() as conn:
+        seen: set[tuple[int, int]] = set()
+        for r in rows:
+            key = (r[2], r[3])
+            if key in seen:
+                continue
+            seen.add(key)
+            conn.execute(
+                text(
+                    "INSERT INTO assignment (id, project_id, character_id, actor_id) "
+                    "VALUES (:id, :pid, :cid, :aid)"
+                ),
+                {"id": r[0], "pid": r[1], "cid": r[2], "aid": r[3]},
+            )
 
 
 def _seed_default_room() -> None:

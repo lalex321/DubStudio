@@ -64,7 +64,12 @@ class Actor(SQLModel, table=True):
 
 
 class Assignment(SQLModel, table=True):
-    __table_args__ = (UniqueConstraint("project_id", "character_id"),)
+    """Character ↔ Actor link inside a project. A character can be cast
+    with multiple actors (массовка / групповые сцены), so the uniqueness
+    is on (character_id, actor_id) — same actor can't be added twice to
+    the same character — but a character can have many actor rows."""
+
+    __table_args__ = (UniqueConstraint("character_id", "actor_id"),)
 
     id: Optional[int] = Field(default=None, primary_key=True)
     project_id: int = Field(foreign_key="project.id", index=True)

@@ -573,13 +573,20 @@
       );
       if (!res.ok) throw new Error('save failed: ' + res.status);
       const data = await res.json();
+      // Server returns the canonical joined string in actor_name and
+      // the array in actor_names — register each name in the datalist
+      // so autocomplete picks up auto-created entries on next edit.
       inp.value = data.actor_name || '';
       inp.dataset.initial = inp.value;
-      if (data.actor_name && !knownActors.has(data.actor_name.toLowerCase())) {
-        const opt = document.createElement('option');
-        opt.value = data.actor_name;
-        datalist.appendChild(opt);
-        knownActors.add(data.actor_name.toLowerCase());
+      const names = Array.isArray(data.actor_names) ? data.actor_names : [];
+      for (const n of names) {
+        const k = n.toLowerCase();
+        if (!knownActors.has(k)) {
+          const opt = document.createElement('option');
+          opt.value = n;
+          datalist.appendChild(opt);
+          knownActors.add(k);
+        }
       }
       recordAction({ kind: 'actor', characterId: cid, before, after: inp.value });
       inp.classList.remove('saving');
@@ -593,7 +600,43 @@
     }
   };
 
+  // Hover tooltip for multi-actor cells (массовка). The input itself
+  // truncates long comma-separated values; the tooltip stacks each name
+  // on its own line so the list is readable. Only shown when the cell
+  // has at least one comma — single-actor cells already fit.
+  const actorTip = (() => {
+    let el = document.getElementById('actor-tooltip');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'actor-tooltip';
+      el.className = 'actor-tooltip';
+      el.hidden = true;
+      document.body.appendChild(el);
+    }
+    return el;
+  })();
+  const showActorTip = (inp) => {
+    const v = (inp.value || '').trim();
+    if (!v.includes(',')) return;
+    const names = v.split(',').map(s => s.trim()).filter(Boolean);
+    if (names.length < 2) return;
+    actorTip.innerHTML = '';
+    for (const n of names) {
+      const div = document.createElement('div');
+      div.textContent = n;
+      actorTip.appendChild(div);
+    }
+    const r = inp.getBoundingClientRect();
+    actorTip.style.left = (window.scrollX + r.left) + 'px';
+    actorTip.style.top = (window.scrollY + r.bottom + 4) + 'px';
+    actorTip.hidden = false;
+  };
+  const hideActorTip = () => { actorTip.hidden = true; };
+
   table.querySelectorAll('.actor-input').forEach(inp => {
+    inp.addEventListener('mouseenter', () => showActorTip(inp));
+    inp.addEventListener('mouseleave', hideActorTip);
+    inp.addEventListener('focus', hideActorTip);
     inp.addEventListener('blur', () => saveActor(inp));
     inp.addEventListener('keydown', ev => {
       if (ev.key === 'Enter') { ev.preventDefault(); inp.blur(); }
@@ -630,13 +673,20 @@
       // Warn before creating new Actor records — catches typos in the
       // clipboard before the server auto-creates misspelled duplicates.
       const willPaste = parts.slice(0, span).filter(Boolean);
+      // Each pasted line is itself a comma-separated list (массовка).
+      // Detect "new" actors at the individual-name level so the warning
+      // is honest about how many fresh records will be auto-created.
       const seen = new Set();
       const newNames = [];
-      for (const n of willPaste) {
-        const key = n.toLowerCase();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        if (!knownActors.has(key)) newNames.push(n);
+      for (const line of willPaste) {
+        for (const piece of line.split(',')) {
+          const n = piece.trim();
+          if (!n) continue;
+          const key = n.toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          if (!knownActors.has(key)) newNames.push(n);
+        }
       }
       let msg = `Paste ${fillCount} actor${fillCount === 1 ? '' : 's'} starting from this row, in the grid's current order?`;
       // Show what will actually be pasted — protects against
