@@ -779,9 +779,8 @@
       ev.preventDefault();
       // Trim blank lines from BOTH ends — Excel often pads a column copy
       // with empty cells above/below the actual data. Blanks in the
-      // middle are kept positionally and treated as "skip this row" in
-      // the fill loop, so a sparse Excel column doesn't accidentally
-      // clear actors on the rows in between.
+      // MIDDLE of the range are meaningful: they signal "no actor for
+      // this character" and clear the existing assignment.
       const rawParts = text.split(/\r?\n/).map(s => s.trim());
       let lo = 0, hi = rawParts.length;
       while (lo < hi && rawParts[lo] === '') lo++;
@@ -792,10 +791,20 @@
       const startIdx = allInputs.indexOf(inp);
       if (startIdx < 0) return;
       const span = Math.min(parts.length, allInputs.length - startIdx);
-      // Drop blanks from the count shown to the user — those rows are
-      // skipped, not pasted.
-      const fillCount = parts.slice(0, span).filter(Boolean).length;
-      if (!fillCount) return;
+      // Count meaningful operations: how many rows get a name written,
+      // and how many get their actor cleared by an interior blank.
+      const sliceForCount = parts.slice(0, span);
+      const fillCount = sliceForCount.filter(Boolean).length;
+      // A "clear" only counts when the target row currently has an actor
+      // — clearing an already-empty row is a no-op the user shouldn't
+      // worry about.
+      let clearCount = 0;
+      for (let i = 0; i < span; i++) {
+        if (parts[i]) continue;
+        const cur = (allInputs[startIdx + i].value || '').trim();
+        if (cur) clearCount++;
+      }
+      if (!fillCount && !clearCount) return;
       const droppedTail = parts.length - span;
       // Warn before creating new Actor records — catches typos in the
       // clipboard before the server auto-creates misspelled duplicates.
@@ -816,6 +825,9 @@
         }
       }
       let msg = `Paste ${fillCount} actor${fillCount === 1 ? '' : 's'} starting from this row, in the grid's current order?`;
+      if (clearCount > 0) {
+        msg += `\n\n${clearCount} row${clearCount === 1 ? '' : 's'} will have ${clearCount === 1 ? 'its' : 'their'} actor CLEARED (blank line in clipboard).`;
+      }
       // Show what will actually be pasted — protects against
       // accidentally-copied unrelated text. The user sees the first
       // few values and bails if it's nonsense.
@@ -831,10 +843,6 @@
       if (droppedTail > 0) {
         msg += `\n\nThe clipboard has ${parts.length} names — the last ${droppedTail} won't fit and will be dropped.`;
       }
-      const blanksKept = span - fillCount;
-      if (blanksKept > 0) {
-        msg += `\n\n${blanksKept} blank line${blanksKept === 1 ? '' : 's'} in the clipboard will be skipped (those rows keep their current actor).`;
-      }
       if (newNames.length) {
         const preview = newNames.slice(0, 10).join(', ');
         const more = newNames.length > 10 ? ` (+${newNames.length - 10} more)` : '';
@@ -844,9 +852,15 @@
       beginBatch();
       try {
         for (let i = 0; i < span; i++) {
-          if (!parts[i]) continue;  // blank in source — leave row untouched
           const target = allInputs[startIdx + i];
-          target.value = parts[i];
+          if (!parts[i]) {
+            // Blank inside the pasted range → user wants "no actor here".
+            // Skip the round-trip if this row was already empty.
+            if (!(target.value || '').trim()) continue;
+            target.value = '';
+          } else {
+            target.value = parts[i];
+          }
           await saveActor(target);
         }
       } finally {
