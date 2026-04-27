@@ -85,6 +85,7 @@
           autocomplete="off"
           value="{{ row.actor_name }}"
           data-initial="{{ row.actor_name }}"
+          {% if 'WALLA' in row.character|upper %}data-walla="1"{% endif %}
           placeholder="—"
         >
       </td>
@@ -615,7 +616,12 @@
     }
     return el;
   })();
+  // Multi-actor input is only meaningful for WALLA / crowd characters.
+  // Marked per-row by the server via data-walla on the input element.
+  const isWallaInput = (inp) => inp.dataset.walla === '1';
+
   const showActorTip = (inp) => {
+    if (!isWallaInput(inp)) return;
     const v = (inp.value || '').trim();
     if (!v.includes(',')) return;
     const names = v.split(',').map(s => s.trim()).filter(Boolean);
@@ -692,6 +698,13 @@
   };
 
   const acShow = (inp) => {
+    // On a non-WALLA cell only the first token is allowed — once the
+    // user has typed a comma, suppress further suggestions because
+    // anything after it will be discarded on save anyway.
+    if (!isWallaInput(inp) && (inp.value || '').includes(',')) {
+      acHide();
+      return;
+    }
     const { token } = acTokenInfo(inp);
     if (!token) { acHide(); return; }
     const picked = acAlreadyPicked(inp);
@@ -859,7 +872,13 @@
             if (!(target.value || '').trim()) continue;
             target.value = '';
           } else {
-            target.value = parts[i];
+            // Non-WALLA cells can only hold one actor — drop the rest of
+            // a comma-list silently rather than shipping noise the server
+            // will discard.
+            const v = isWallaInput(target)
+              ? parts[i]
+              : parts[i].split(',')[0].trim();
+            target.value = v;
           }
           await saveActor(target);
         }

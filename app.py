@@ -766,6 +766,14 @@ async def set_actor(request: Request, project_id: int, character_id: int):
         if not char or char.project_id != project_id:
             raise HTTPException(404, "Character not found")
 
+        # Multi-actor cast is only meaningful for WALLA / crowd characters.
+        # On a regular character we silently keep just the first name —
+        # protects against stray commas in copy-paste from creating
+        # phantom assignments and matches the UI rules on the front-end.
+        is_walla = "WALLA" in (char.name or "").upper()
+        if not is_walla and len(wanted) > 1:
+            wanted = wanted[:1]
+
         existing = list(s.exec(
             select(Assignment).where(
                 Assignment.project_id == project_id,
